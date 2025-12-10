@@ -1,6 +1,8 @@
-from reefsight.main import predict_tabular, predict_image
+from reefsight.main import predict_tabular, predict_image_from_bytes
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+
+
 
 # -------------------------------------------------------------
 # Assumes  predict_image / predict_tabular functions exist in main.py file
@@ -45,7 +47,7 @@ def get_predict(input_one: float,
 
 
 # Predict endpoint for IMAGE PREDICTION
-MODEL_READY = False
+MODEL_READY = True
 
 @app.post("/predict_image")
 async def predict_image_endpoint(image_file: UploadFile= File(...)):
@@ -57,6 +59,7 @@ async def predict_image_endpoint(image_file: UploadFile= File(...)):
     # Read uploaded image bytes
     image_bytes = await image_file.read()
 
+
     # If model is not ready, return warning message
     if not MODEL_READY:
         return {
@@ -66,7 +69,7 @@ async def predict_image_endpoint(image_file: UploadFile= File(...)):
         }
 
     # Otherwise, call real predict function
-    prediction = predict_image(image_bytes)   #PLUG IN FUTURE PREDICT FUNCTION
+    prediction = predict_image_from_bytes(image_bytes)   #PLUG IN FUTURE PREDICT FUNCTION
 
     return {
         "prediction": prediction,
