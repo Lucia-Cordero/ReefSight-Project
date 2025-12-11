@@ -30,11 +30,9 @@ notebook==6.4.12
 notebook_shim==0.2.0
 traitlets==5.5.0
 
-#-----------------------------------------------
 
 #ReefSight: requirements used so far:
-
-#-----------------------------------------------
+split-folders==3.0.1
 
 
 #API-related
@@ -42,6 +40,3 @@ fastapi
 uvicorn
 python-multipart #needed for UploadFile
 
-#main.py
-tensorflow.keras.models
-tensorflow.keras.preprocessing
