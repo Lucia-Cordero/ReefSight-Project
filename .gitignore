@@ -8,6 +8,7 @@
 **/build
 
 # Ignore these macos generated files
+__pycache__/
 .DS_Store
 
 # Ignore these Windows generated files
@@ -28,6 +29,7 @@ data/
 
 # Saved models
 models/
+test_img/
 *.joblib
 *.h5
 
@@ -45,3 +47,27 @@ secrets.toml
 
 # User defined extras
 # Complete to your desire
+
+
+ #these below are from vlad and we need to figure out which to keep or remove#
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST

@@ -24,7 +24,7 @@ For the Image Classifier
 
 For the Tabular
 |**Source** | Kaggle Dataset: Coral Reef Global Bleaching|
-| **URL** | [https://www.kaggle.com/datasets/mehrdat/coral-reef-global-bleaching]
+| **URL** | [https://www.kaggle.com/datasets/mehrdat/coral-reef-global-bleaching]|
 | **Classes** | # (name 1, name2) |
 | **Format** | CSV file containing metrics like temperature, sea level, and bleaching percentages|
 | **Processing** | Structured dataset used to train a separate dense network to predict bleaching risk based on factors such as location, time, and environment.|
