@@ -4,6 +4,7 @@
 
 #      Standard version
 FROM python:3.12
+#WORKDIR /prod
 
 #      Slim version
 # FROM python:3.12-slim
@@ -19,6 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy our code
 COPY packagename packagename
 COPY api api
+#COPY models models
 
 # Make directories that we need, but that are not included in the COPY
 RUN mkdir /raw_data
@@ -30,3 +32,9 @@ RUN mkdir /models
 # RUN python -c 'replace_this_with_the_commands_you_need_to_run_to_load_the_model'
 
 CMD uvicorn api.fast:app --host 0.0.0.0 --port $PORT
+
+
+# Install HDF5 library
+#RUN apt-get update && apt-get install -y \
+ #   libhdf5-dev \
+  #  && apt-get clean

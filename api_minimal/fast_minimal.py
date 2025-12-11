@@ -1,5 +1,5 @@
 from reefsight.main import predict_tabular, predict_image_from_bytes
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 
 
