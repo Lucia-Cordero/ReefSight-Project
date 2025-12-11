@@ -1,19 +1,21 @@
-from reefsight.main import predict_tabular, predict_image_from_bytes
+from reefsight.predict import load_image_model_trained, load_tabular_model_trained, predict_tabular, predict_image
+from reefsight.preprocessing import TabularInput
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+import pandas as pd
 
-
-
-# -------------------------------------------------------------
-# Assumes  predict_image / predict_tabular functions exist in main.py file
-# -------------------------------------------------------------
 
 
 # Initialize FastAPI app
 app = FastAPI()
+print('✅ Fast API initialized')
 
+# Pre-load trained models (image, tabular) into app.state
+app.state.image_model = load_image_model_trained()
+app.state.tabular_model = load_tabular_model_trained()
 
-
+MODEL_READY=True
+'''
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allows all origins
@@ -21,36 +23,19 @@ app.add_middleware(
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
 )
+'''
 
-# Root endpoint for https://your-domain.com/
+# Root endpoint for https://our-domain.com/
 @app.get("/")
 def root():
     return {
-        'message': "Hi, The API  is running! This is the root endpoint"
+        'message': "Hi, The API  is running! Welcome to ReefSight"
     }
 
 
-
-# Predict endpoint DUMMY
-def get_predict(input_one: float,
-            input_two: float):
-
-    # Dummy version, just return the sum of the two inputs and the original inputs
-    prediction = float(input_one) + float(input_two)
-    return {
-        'prediction': prediction,
-        'inputs': {
-            'input_one': input_one,
-            'input_two': input_two
-        }
-    }
-
-
-# Predict endpoint for IMAGE PREDICTION
-MODEL_READY = True
-
-@app.post("/predict_image")
-async def predict_image_endpoint(image_file: UploadFile= File(...)):
+# Image predict endpoint for https://our-domain.com/predict/image
+@app.post("/predict/image")
+async def predict_image_api(image_file: UploadFile= File(...)):
 
     # Make sure it's an image
     if not image_file.content_type.startswith("image/"):
@@ -68,11 +53,30 @@ async def predict_image_endpoint(image_file: UploadFile= File(...)):
             "model_ready": False
         }
 
-    # Otherwise, call real predict function
-    prediction = predict_image_from_bytes(image_bytes)   #PLUG IN FUTURE PREDICT FUNCTION
+    # Call prediction function "predict_image"
+    model = app.state.image_model
+    prediction = predict_image(model=model, image_bytes=image_bytes)
 
     return {
         "prediction": prediction,
         "inputs": {"filename": image_file.filename},
         "model_ready": True
     }
+
+# Tabular predict endpoint for https://our-domain.com/predict/tabular
+@app.post("/predict/tabular")
+def predict_tabular_api(payload: TabularInput):
+
+
+    # Convert payload → pandas DataFrame (1 row)
+    X_pred = pd.DataFrame([payload. dict()])
+
+    # Call prediction function "predict_tabular"
+    model = app.state.tabular_model
+    prediction = predict_tabular(model=model, X_pred=X_pred)
+
+    return {
+        "prediction": prediction,
+        "inputs": X_pred.to_dict(orient="records")[0],
+        "model_ready": True
+}

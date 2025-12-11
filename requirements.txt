@@ -23,3 +23,6 @@ uvicorn
 
 #Image Classifier
 split-folders==3.0.1
+
+#Tabular Classifier
+dill

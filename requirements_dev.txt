@@ -31,12 +31,20 @@ notebook_shim==0.2.0
 traitlets==5.5.0
 
 
+# -------------------------------------------------------------
 #ReefSight: requirements used so far:
+# -------------------------------------------------------------
+
+
+#Image Classifier
 split-folders==3.0.1
+
+#Tabular Classifier
+dill
+
 
 
 #API-related
 fastapi
 uvicorn
 python-multipart #needed for UploadFile
-
