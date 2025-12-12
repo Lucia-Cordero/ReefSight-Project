@@ -27,6 +27,14 @@ run_api:
 	uvicorn api_minimal.fast_minimal:app --reload --port 8000
 
 
+# ----------------------------------
+#         HEROKU COMMANDS
+# ----------------------------------
+
+streamlit:
+	-@streamlit run app.py
+
+
 #======================#
 #          GCP         #
 #======================#

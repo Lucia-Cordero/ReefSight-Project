@@ -41,7 +41,7 @@ Document main API endpoints here
 These instructions are for users who wish to clone the repository and run the training scripts locally.
 
 # Prerequisites
-You need Python 3.8+ installed.
+You need Python 3.10.6 installed.
 
 |**Clone the Repository**|:
 git clone https://github.com/YourUsername/ReefSight-Project.git

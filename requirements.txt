@@ -24,10 +24,12 @@ keras==3.8.0
 # API
 fastapi
 uvicorn
-
+streamlit
+#add Fulion
+altair
 
 #Image Classifier
-split-folders==3.0.1
+split-folders
 
 # img
 opencv-python
