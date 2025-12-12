@@ -2,25 +2,26 @@ from tensorflow.keras.models import load_model
 import numpy as np
 import pandas as pd
 import dill
+import os
 
 
 
-from reefsight.preprocessing import load_img
-from reefsight.preprocessing import preprocess_tabular
+from project_logic.preprocessing import load_img
+from project_logic.preprocessing import preprocess_tabular
 
 
 #-----------------------MODEL_LOADING-------------------
 
 
 def load_image_model_trained():
-    model_path = "/home/lucia/code/Lucia-Cordero/Models/baseline_model.keras"
+    model_path = os.path.join("models", "baseline_model.keras")
     image_model = load_model(model_path)
     print('✅ Image_Model_loaded')
     return image_model
 
 
 def load_tabular_model_trained():
-    model_path = "/home/lucia/code/Lucia-Cordero/Models/best_model_tabular.dill"
+    model_path = os.path.join("models", "best_model_tabular.dill")
     with open(model_path, "rb") as f:
         tabular_model = dill.load(f)
     print('✅ Tabular_Model_loaded')
