@@ -4,183 +4,278 @@ import pandas as pd
 import json
 import io
 import os
-from datetime import datetime
+from datetime import datetime as dt
+from datetime import date as dt_date
+import altair as alt
+from streamlit_folium import st_folium
+import folium
+from PIL import Image
+import time
+import streamlit.components.v1 as components
 
 # --- CONFIGURATION ---
-# IMPORTANT: Replace this with your actual deployed FastAPI URL
-API_URL = "http://localhost:8000"
-# Fallback to which endpoint?
-DEFAULT_ENDPOINT = #"/predict/endpoint"#
+API_URL = "https://my-api-98532754363.europe-west1.run.app/"
+NOAA_DATA_SOURCE_URL = "https://coralreefwatch.noaa.gov/product/5km/index.php#data_access"
 
-# PAGE SETUP
+# ==================================================================
+# 1. SIMULATED DATA & API
+# ==================================================================
+def get_simulated_noaa_data(date: dt, lat: float, lon: float) -> dict:
+    st.info(f"🔌 **Simulating NOAA data fetch** for {lat}°N, {lon}°E on {date}...")
+    return {
+        'Distance_to_Shore': 10.0 + (abs(lon) % 5),
+        'Turbidity': 2.5 + (abs(lat) % 1),
+        'Cyclone_Frequency': 0.1,
+        'Depth_m': 15.0 + (abs(lon) % 10),
+        'ClimSST': 26.0 + (abs(lat) % 2),
+        'Temperature_Kelvin': 300.0 + (abs(lon) % 2),
+        'Temperature_Kelvin_Standard_Deviation': 1.5,
+        'Windspeed': 5.0 + (abs(lat) % 3),
+    }
+
+def make_api_request_simulation(prediction_type, data, image_present, api_url):
+    if prediction_type == "Image-Only (VGG Augmented)":
+        risk = 0.75
+        model = "96 vgg16_best.keras (Image Model)"
+        features = ["VGG16 Features (Image)"]
+    elif prediction_type in ("Tabular-Only", "Manual Data Entry Only (No NOAA Pull)"):
+        risk = 0.55
+        model = "coral_bleaching_tabular_pipe.ipynb (Tabular Model)"
+        features = list(data.keys())
+    elif prediction_type == "Multi-Modal Fusion (Image + Data)":
+        risk = 0.89
+        model = "Fusion Model (96 vgg16 + Tabular Pipeline)"
+        features = list(data.keys()) + ["VGG16 Features (Image)"]
+    else:
+        risk = 0.40
+        model = "Default/Unknown Model"
+        features = []
+
+    time.sleep(1)
+    return {
+        "status": "success",
+        "predicted_bleaching_risk": risk * 100,
+        "model_used": model,
+        "input_features": features,
+        "data_sent_to_api": data,
+        "image_processed": image_present,
+        "api_endpoint": api_url
+    }, None
+
+# ==================================================================
+# 2. PAGE SETUP & CSS
+# ==================================================================
 st.set_page_config(
-    page_title="ReefSight Bleaching Predictor",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-st.title("🌊 ReefSight: Multi-Modal Coral Bleaching Prediction")
-
-st.image("https://www.cruiseexperts.com/news/wp-content/uploads/2015/04/Great-Barrier-Reef.jpg",
-         caption="A healthy Great Barrier Reef", use_column_width=True
+    page_title="🌊 ReefSight Bleaching Predictor",
+    initial_sidebar_state="collapsed",
+    layout="wide"
 )
 
 st.markdown("""
-Welcome to the ReefSight prediction interface. You can analyze coral health using either
-an **Image Upload** or **Structured Environmental Data**.
+<style>
+.stApp {
+    background: linear-gradient(to bottom, #e0f7fa 0%, #b2ebf2 40%, #80deea 100%);
+    color: #004d40;
+}
+h1, h2, h3, h4, h5, h6 { color: #004d40 !important; }
+button[data-testid*="stFormSubmitButton"] {
+    background-color: darkorange !important;
+    color: white !important;
+    font-weight: bold !important;
+    font-size: 16px !important;
+    padding: 10px 22px !important;
+    border-radius: 8px !important;
+    border: none !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    display: block !important;
+}
+
+/* Fish loader */
+.fish-loader-container { width:100%; height:50px; overflow:hidden; position:relative; margin:20px 0; background:transparent; }
+.fish-loader { width:50px; height:30px; background-color:#ff8f00; border-radius:50% 50% 50% 50%/60% 60% 40% 40%; position:absolute; left:-100px; animation:swim 3s linear infinite; transform:rotate(5deg);}
+.fish-loader::after { content:''; position:absolute; top:5px; left:45px; width:20px; height:15px; background-color:#ff8f00; border-radius:50%/0 100% 0 100%; transform:rotate(45deg);}
+@keyframes swim { 0% {left:-10%;} 100% {left:110%;} }
+</style>
+""", unsafe_allow_html=True)
+
+# Header
+col1, col2, col3 = st.columns([1,8,1])
+with col2:
+    st.title("🌊 ReefSight: Multi-Modal Coral Bleaching Prediction")
+    st.image("Great-Barrier-Reef.jpg", caption="A healthy Great Barrier Reef", width=1050)
+    st.markdown("Welcome! Analyze coral health using images, environmental data, or both.")
+st.markdown("---")
+
+# ==================================================================
+# 3. MAP + SIDEBAR INPUTS
+# ==================================================================
+if "selected_location" not in st.session_state:
+    st.session_state.selected_location = None
+
+col_map, col_inputs = st.columns([3,1])
+
+with col_map:
+    st.subheader("Select Location on Map")
+    default_location = [0.0,0.0]
+    map_center = [st.session_state.selected_location["lat"], st.session_state.selected_location["lon"]] if st.session_state.selected_location else default_location
+
+    # Reef overlay map
+    m = folium.Map(
+        location=map_center, zoom_start=3, width="100%", height=550,
+        tiles="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", attr="Reef Overlay"
+    )
+
+    if st.session_state.selected_location:
+        folium.Marker(
+            location=[st.session_state.selected_location["lat"], st.session_state.selected_location["lon"]],
+            tooltip="Selected Location",
+            icon=folium.Icon(color="darkblue", icon="fish", prefix="fa")
+        ).add_to(m)
+
+    map_data = st_folium(m, width="100%", height=550)
+
+    if map_data and map_data.get("last_clicked"):
+        st.session_state.selected_location = {"lat": map_data["last_clicked"]["lat"], "lon": map_data["last_clicked"]["lng"]}
+
+# Form for inputs
+with col_inputs:
+    with st.form("prediction_input_form"):
+        st.subheader("Required Prediction Inputs")
+        input_date = st.date_input("Observation Date", dt_date.today())
+        current_lat = st.session_state.selected_location["lat"] if st.session_state.selected_location else 0.0
+        current_lon = st.session_state.selected_location["lon"] if st.session_state.selected_location else 0.0
+        input_lat = st.number_input("Latitude", value=current_lat, format="%.6f")
+        input_lon = st.number_input("Longitude", value=current_lon, format="%.6f")
+        st.session_state.selected_location = {"lat": input_lat, "lon": input_lon}
+
+        st.markdown("---")
+        st.subheader("Prediction Mode Selection")
+        prediction_type = st.radio(
+            "Choose prediction mode:",
+            ("Multi-Modal Fusion (Image + Data)", "Image-Only (VGG Augmented)", "Tabular-Only", "Manual Data Entry Only (No NOAA Pull)"),
+            index=0, horizontal=True
+        )
+
+        st.markdown("---")
+        override_features = {}
+        override_data = False
+        if prediction_type in ("Multi-Modal Fusion (Image + Data)", "Tabular-Only", "Manual Data Entry Only (No NOAA Pull)"):
+            st.subheader("Optional Feature Overrides")
+            with st.expander("Click to enter environmental data manually"):
+                override_data = True
+                c1,c2 = st.columns(2)
+                with c1:
+                    override_features["Distance_to_Shore"]=st.number_input("Distance to Shore (km)",10.0)
+                    override_features["Turbidity"]=st.number_input("Turbidity (NTU)",2.5)
+                    override_features["Cyclone_Frequency"]=st.number_input("Cyclone Frequency",0.1)
+                    override_features["Depth_m"]=st.number_input("Depth (m)",15.0)
+                with c2:
+                    override_features["ClimSST"]=st.number_input("ClimSST (°C)",26.0)
+                    override_features["Temperature_Kelvin"]=st.number_input("Temperature (K)",300.0)
+                    override_features["Temperature_Kelvin_Standard_Deviation"]=st.number_input("Temp Std Dev",1.5)
+                    override_features["Windspeed"]=st.number_input("Windspeed (m/s)",5.0)
+
+        st.markdown("---")
+        uploaded_file = None
+        if prediction_type in ("Multi-Modal Fusion (Image + Data)", "Image-Only (VGG Augmented)"):
+            st.subheader("Image Input")
+            uploaded_file = st.file_uploader("Upload coral image", type=["jpg","png","jpeg"])
+
+        form_submitted = st.form_submit_button("RUN PREDICTION", type="primary", help="Run bleaching prediction now!")
+
+# ==================================================================
+# 4. HANDLE SUBMISSION
+# ==================================================================
+if form_submitted:
+    # Validation
+    if not input_date or input_lat is None or input_lon is None or (prediction_type in ("Multi-Modal Fusion (Image + Data)", "Image-Only (VGG Augmented)") and not uploaded_file):
+        st.error("Please fill all required fields.")
+        st.stop()
+
+    # Fish loader
+    loader_placeholder = st.empty()
+    loader_placeholder.markdown("""
+    <div class="fish-loader-container">
+        <div class="fish-loader"></div>
+        <p style="text-align:center; color:#004d40; font-weight:bold; margin-top:30px;">
+            Running prediction...
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Prepare data
+    data_payload={}
+    if prediction_type!="Image-Only (VGG Augmented)":
+        aux_data = get_simulated_noaa_data(dt.combine(input_date, dt.min.time()), input_lat, input_lon)
+        data_payload.update(aux_data)
+        if override_data:
+            data_payload.update(override_features)
+
+    # Simulated API request
+    api_response,error = make_api_request_simulation(prediction_type, data_payload, uploaded_file is not None, API_URL)
+    loader_placeholder.empty()
+
+    # Show bubbles
+    def show_bubbles(num_bubbles=50, width="100%", height=400):
+        components.html(f"""
+<div id="particles-js" style="position:relative; width:{width}; height:{height}px;"></div>
+<script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+<script>
+particlesJS("particles-js", {{
+  "particles": {{
+    "number": {{ "value": {num_bubbles} }},
+    "color": {{ "value": "#00c8ff" }},
+    "shape": {{ "type": "circle" }},
+    "opacity": {{ "value": 0.6 }},
+    "size": {{ "value": 10, "random": true }},
+    "line_linked": {{ "enable": false }},
+    "move": {{ "enable": true, "speed": 2, "direction": "top", "random": true, "out_mode": "out" }}
+  }},
+  "interactivity": {{
+    "events": {{ "onhover": {{ "enable": false }}, "onclick": {{ "enable": false }} }}
+  }},
+  "retina_detect": true
+}});
+</script>
+""", height=height)
+
+    if error:
+        st.error(f"Prediction Error: {error}")
+        st.stop()
+
+    st.success("Prediction complete!")
+    show_bubbles(num_bubbles=80,height=500)
+
+    bleaching_percentage = api_response["predicted_bleaching_risk"]
+    risk_level = "High Risk" if bleaching_percentage>70 else ("Moderate Risk" if bleaching_percentage>40 else "Low Risk")
+
+    st.write(f"**Date:** {input_date}")
+    st.write(f"**Latitude:** {input_lat}")
+    st.write(f"**Longitude:** {input_lon}")
+    st.write(f"**Prediction Type:** {prediction_type}")
+    st.metric(label="Predicted Bleaching Risk", value=f"{bleaching_percentage:.1f}%", delta=risk_level)
+
+    if uploaded_file:
+        st.subheader("Uploaded Coral Image")
+        st.image(uploaded_file, width=350)
+
+    # Show model used
+    st.subheader("Model Used")
+    st.info(api_response.get("model_used","N/A"))
+
+# ==================================================================
+# 5. FOOTER
+# ==================================================================
+st.markdown("---")
+colL,colM,colR = st.columns([1,8,1])
+with colM:
+    st.markdown("### Privacy and Data Security Policy")
+    st.warning("NO DATA RETENTION POLICY")
+    st.markdown("""
+* **Input Data**: All user inputs (images, coordinates, environmental data) are used ONLY for the immediate prediction request.
+* **Data Handling**: No images, coordinates, or predictions are stored, logged, or retained.
+* **Security**: All processing occurs in-memory and is wiped immediately.
+* **Usage**: Your data is never written to disk or saved in any persistent way.
 """)
 
-# --- Prediction Type Selector ---
-prediction_type = st.sidebar.selectbox(
-    "Select Prediction Mode:",
-    ("Multi-Modal Fusion (Image + Data)", "Image-Only (VGG Augmented)", "Tabular-Only")
-)
-
-
-# --- Tabular Data Inputs (Needed for Fusion and Tabular-Only) ---
-# NOTE: These inputs assume your tabular data is unscaled, and your API handles the scaling.
-# Adjust the number and names of features (e.g., 10 features)
-st.sidebar.header("Contextual Data Input")
-
-with st.sidebar.form(key='tabular_form'):
-    st.markdown("**Enter 10 Tabular Features**:")
-
-    # Example Feature Inputs (Adjust these to your 10 actual feature names!)
-    f1 = st.number_input('1. Latitude Degrees', value=15.0, format="%.4f", key='lat')
-    f2 = st.number_input('2. Longitude Degrees', value=-80.0, format="%.4f", key='lon')
-    f3 = st.number_input('3. Distance to Shore (km)', value=10.0, format="%.2f", key='dist')
-    f4 = st.number_input('4. Turbidity (NTU)', value=2.5, format="%.1f", key='turbidity')
-    f5 = st.number_input('5. Cyclone Frequency (per year)', value=0.1, format="%.2f", key='cyclone')
-    f6 = st.number_input('6. Depth (m)', value=15.0, format="%.1f", key='depth')
-    f7 = st.number_input('7. ClimSST (°C)', value=26.0, format="%.2f", key='clim_sst')
-    f8 = st.number_input('8. Temperature (Kelvin)', value=300.0, format="%.2f", key='temp_k')
-    f9 = st.number_input('9. Temp Kelvin Std Dev', value=1.5, format="%.2f", key='temp_std')
-    f10 = st.number_input('10. Windspeed (m/s)', value=5.0, format="%.2f", key='windspeed')
-
-    tabular_submitted = st.form_submit_button(label='Generate Prediction')
-
-    # Package tabular data into a dictionary with the EXACT required keys
-    tabular_data = {
-        'Latitude_Degrees': f1,
-        'Longitude_Degrees': f2,
-        'Distance_to_Shore': f3,
-        'Turbidity': f4,
-        'Cyclone_Frequency': f5,
-        'Depth_m': f6,
-        'ClimSST': f7,
-        'Temperature_Kelvin': f8,
-        'Temperature_Kelvin_Standard_Deviation': f9,
-        'Windspeed': f10
-    }
-
-
-uploaded_file = None
-if prediction_type in ("Multi-Modal Fusion (Image + Data)", "Image-Only (VGG Augmented)"):
-    st.header("Image Input")
-    uploaded_file = st.file_uploader("Upload a coral image (JPG, PNG)", type=["jpg", "png", "jpeg"])
-
-# --- API CALL FUNCTION ---
-def make_api_request(endpoint, files=None, data=None):
-    """Handles the request and displays prediction or error."""
-
-    full_url = API_URL + endpoint
-
-    if API_URL == "http://localhost:8000" and not os.getenv("TEST_MODE"):
-        st.warning("⚠️ Using local API endpoint. Ensure your FastAPI server is running.")
-
-    try:
-        if files or data:
-            # For Fusion and Tabular, data must be a JSON string inside 'data' field
-            if data:
-                payload = {'data': json.dumps(data)}
-            else:
-                payload = None
-
-            response = requests.post(full_url, files=files, data=payload)
-        else:
-            # Should not happen in this app structure
-            return None, "Error: No data or files provided."
-
-        response.raise_for_status() # Raises HTTPError for bad responses (4xx or 5xx)
-        return response.json(), None
-
-    except requests.exceptions.HTTPError as e:
-        error_detail = response.json().get('detail', str(e))
-        return None, f"API HTTP Error ({response.status_code}): {error_detail}"
-    except requests.exceptions.RequestException as e:
-        return None, f"Connection Error: Could not reach API at {API_URL}. Is it running?"
-    except Exception as e:
-        return None, f"An unexpected error occurred: {e}"
-
-# IMAGE UPLOAD AND API CALL
-# --- EXECUTION LOGIC ---
-if tabular_submitted or (uploaded_file is not None):
-
-    files = None
-    data_to_send = tabular_data if tabular_data else None
-
-    # Determine endpoint and files based on prediction_type
-    if prediction_type == "Tabular-Only":
-        endpoint = "/predict/tabular"
-        # No files needed
-
-    elif prediction_type == "Image-Only (VGG Augmented)":
-        endpoint = "/predict/image/vgg/augmented"
-        if uploaded_file is None:
-            st.error("Please upload an image for Image-Only prediction.")
-            st.stop()
-        files = {"image_file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
-        data_to_send = None
-
-    elif prediction_type == "Multi-Modal Fusion (Image + Data)":
-        endpoint = "/predict/fusion"
-        if uploaded_file is None:
-            st.error("Please upload an image for Fusion prediction.")
-            st.stop()
-        files = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
-
-
-    # --- CALL API ---
-    with st.spinner(f"Predicting using {endpoint}..."):
-        result_json, error = make_api_request(endpoint, files=files, data=data_to_send)
-
-
-    # --- DISPLAY RESULTS ---
-    if error:
-        st.error(f"Prediction Failed: {error}")
-    elif result_json:
-        # Check for model loading errors returned in the JSON payload
-        if "error" in result_json.get("prediction", {}):
-            st.error(f"Model Loading Error: {result_json['prediction']['error']}")
-        else:
-            st.success("Prediction Successful!")
-
-            prediction = result_json.get('prediction', {})
-
-            # Display uploaded image if available
-            if uploaded_file:
-                image_data = uploaded_file.getvalue()
-                st.image(image_data, caption=uploaded_file.name, width=300)
-
-            st.header("Results")
-
-            col1, col2 = st.columns(2)
-
-            # Display Prediction Metrics
-            with col1:
-                st.metric(
-                    label="Predicted Class",
-                    value=prediction.get("predicted_class", "N/A")
-                )
-            with col2:
-                # Display Bleaching Probability as a percentage
-                prob_bleached = prediction.get("probability_bleached", 0.0)
-                st.metric(
-                    label="Bleaching Probability",
-                    value=f"{prob_bleached * 100:.2f} %"
-                )
-
-            st.subheader("Input Details")
-            st.json(result_json.get("inputs"))
-
-            st.info(f"Model Used: {prediction.get('model_used')}")

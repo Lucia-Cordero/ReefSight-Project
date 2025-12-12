@@ -20,6 +20,14 @@ keras==3.8.0
 # API
 fastapi
 uvicorn
+streamlit
+#add Fulion
+altair
+
+#Image Classifier
+split-folders
+
+# img
 python-multipart
 
 
