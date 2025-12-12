@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from tensorflow.keras.preprocessing.image import img_to_array
 from PIL import Image
 import io
+import os
 
 
 class TabularInput(BaseModel):
@@ -50,7 +51,7 @@ def load_img(img_bytes: bytes):
 
 
 def load_tabular_preproc():
-    preprocessor_path = "/home/lucia/code/Lucia-Cordero/Models/preproc_tabular.dill"
+    preprocessor_path = os.path.join("models", "preproc_tabular.dill")
     with open(preprocessor_path, "rb") as f:
             preprocessor = dill.load(f)
 

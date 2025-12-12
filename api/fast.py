@@ -1,5 +1,5 @@
-from reefsight.predict import load_image_model_trained, load_tabular_model_trained, predict_tabular, predict_image
-from reefsight.preprocessing import TabularInput
+from project_logic.predict import load_image_model_trained, load_tabular_model_trained, predict_tabular, predict_image
+from project_logic.preprocessing import TabularInput
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
@@ -15,6 +15,7 @@ app.state.image_model = load_image_model_trained()
 app.state.tabular_model = load_tabular_model_trained()
 
 MODEL_READY=True
+
 '''
 app.add_middleware(
     CORSMiddleware,
