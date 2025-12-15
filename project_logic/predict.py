@@ -10,14 +10,27 @@ from project_logic.preprocessing import load_img
 from project_logic.preprocessing import preprocess_tabular
 
 
-#-----------------------MODEL_LOADING-------------------
+# -----------------------------------------------------------------------
+#                              MODEL LOADING
+# -----------------------------------------------------------------------
 
+IMAGE_MODELS = {
+    "baseline": "baseline_image_model.keras",
+    "vgg16": "vgg16_best.keras",
+}
 
-def load_image_model_trained():
-    model_path = os.path.join("models", "baseline_model.keras")
-    image_model = load_model(model_path)
-    print('✅ Image_Model_loaded')
-    return image_model
+def load_image_models_trained(model_name: str = "vgg16"):
+    if model_name not in IMAGE_MODELS:
+        raise ValueError(
+            f"Unknown image model '{model_name}'. "
+            f"Available models: {list(IMAGE_MODELS.keys())}"
+        )
+
+    model_path = os.path.join("models", IMAGE_MODELS[model_name])
+    model = load_model(model_path)
+
+    print(f"✅ Image model '{model_name}' loaded")
+    return model
 
 
 def load_tabular_model_trained():
@@ -28,7 +41,10 @@ def load_tabular_model_trained():
     return tabular_model
 
 
-#-----------------------PREDICTION--------------------------
+# -----------------------------------------------------------------------
+#                           PREDICTION: IMAGE
+# -----------------------------------------------------------------------
+
 
 def predict_image(model=None, image_bytes=None):
     """
@@ -58,6 +74,9 @@ def predict_image(model=None, image_bytes=None):
     }
 
 
+# -----------------------------------------------------------------------
+#                           PREDICTION: TABULAR
+# -----------------------------------------------------------------------
 
 def predict_tabular(model=None, X_pred: pd.DataFrame = None):
     """
