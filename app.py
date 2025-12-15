@@ -9,10 +9,45 @@ import folium
 from PIL import Image
 import streamlit.components.v1 as components
 import io
+import random
 
 # --- CONFIGURATION ---
 API_URL = "https://my-api-98532754363.europe-west1.run.app/"
 NOAA_DATA_SOURCE_URL = "https://coralreefwatch.noaa.gov/product/5km/index.php#data_access"
+
+# --- CORAL_FACTS ---
+CORAL_FACTS = [
+    " Coral bleaching occurs when corals expel the algae (zooxanthellae) that live in their tissues, causing the coral to turn white.",
+    " The primary cause of coral bleaching is rising sea temperatures, often linked to climate change.",
+    " Bleached corals are not dead, but they are under more stress and are at a higher risk of mortality.",
+    " Increased sea surface temperatures are the most common cause of coral bleaching.",
+    " Pollution from agricultural runoff and sewage can also lead to coral bleaching.",
+    " Overexposure to sunlight, especially during low tides, can cause corals to bleach.",
+    " Ocean acidification, resulting from increased CO2 levels, weakens corals and makes them more susceptible to bleaching.",
+    " Coral bleaching reduces the biodiversity of coral reefs, as many marine species depend on healthy corals for habitat.",
+    " Bleached corals have reduced reproductive capabilities, affecting the regeneration of coral populations.",
+    " Coral reefs provide coastal protection by reducing wave energy, and their degradation can lead to increased coastal erosion.",
+    " The loss of coral reefs can negatively impact local economies that rely on tourism and fishing.",
+    " The first global coral bleaching event was recorded in 1998, during a strong El Niño event.",
+    " Another significant global bleaching event occurred in 2010, affecting reefs in the Caribbean, Indian Ocean, and Southeast Asia.",
+    " The most severe global bleaching event to date happened between 2014 and 2017, impacting over 70% of the world's coral reefs.",
+    " Rising global temperatures due to climate change are the primary driver of increased coral bleaching events.",
+    " Climate models predict that if current trends continue, annual severe bleaching will occur on 99% of the world's reefs by the end of the century.",
+    " Efforts to reduce greenhouse gas emissions can help mitigate the impact of climate change on coral reefs.",
+    " Marine protected areas (MPAs) can help reduce local stressors on coral reefs, giving them a better chance to recover from bleaching events.",
+    " Coral restoration projects involve growing corals in nurseries and transplanting them to degraded reefs.",
+    " Researchers are exploring the potential of breeding heat-resistant coral species to withstand higher temperatures.",
+    " Reducing pollution and improving water quality can help alleviate some of the stressors that contribute to coral bleaching.",
+    " Coral reefs support over 25% of all marine species, despite covering less than 1% of the ocean floor.",
+    " They provide food and livelihood for millions of people worldwide.",
+    " Coral reefs are a source of new medicines, including treatments for cancer and other diseases.",
+    " Healthy coral reefs contribute to the overall health of the ocean, which is essential for the planet's climate regulation.",
+    " Protecting coral reefs is crucial for maintaining biodiversity and the well-being of human communities that depend on them."
+]
+
+def get_random_fact():
+    """Returns a random fact from the CORAL_FACTS list."""
+    return random.choice(CORAL_FACTS)
 
 # --- PAGE SETUP ---
 st.set_page_config(
@@ -28,7 +63,7 @@ st.markdown("""
 h1,h2,h3,h4,h5,h6{color:#004d40 !important;}
 button[data-testid*="stFormSubmitButton"] { background-color: darkorange !important; color: white !important; font-weight:bold !important; font-size:16px !important; padding:10px 22px !important; border-radius:8px !important; border:none !important; margin-left:auto !important; margin-right:auto !important; display:block !important; }
 .fish-loader-container { width:100%; height:50px; overflow:hidden; position:relative; margin:20px 0; background:transparent; }
-.fish-loader { width:50px; height:30px; background-color:#ff8f00; border-radius:50% 50% 50% 50% / 60% 60% 40% 40%; position:absolute; left:-100px; animation:swim 3s linear infinite; transform:rotate(5deg);}
+.fish-loader { width:50px; height:30px; background-color:#ff8f00; border-radius:50% 50% 50% 50% / 60% 60% 40% 40%; position:absolute; left:-100px; animation:swim 3s linear infinite; transform:rotate(-5deg);}
 .fish-loader::after { content:''; position:absolute; top:5px; left:45px; width:20px; height:15px; background-color:#ff8f00; border-radius:50% / 0 100% 0 100%; transform:rotate(45deg);}
 @keyframes swim {0%{left:-10%;}100%{left:110%;}}
 </style>
@@ -39,7 +74,10 @@ col1, col2, col3 = st.columns([1, 8, 1])
 with col2:
     st.title("🌊 ReefSight: Multi-Modal Coral Bleaching Prediction")
     st.image("Great-Barrier-Reef.jpg", caption="A healthy Great Barrier Reef", width=1050)
-    st.markdown("Welcome to ReefSight. Analyze coral health using images, environmental data, or both.")
+    st.markdown(
+        "<p style='text-align:center;'>Welcome to ReefSight. Analyze coral health using images, environmental data, or both.</p>",
+        unsafe_allow_html=True
+    )
 st.markdown("---")
 
 # --- SESSION STATE ---
@@ -59,7 +97,14 @@ with col_map:
     ] if st.session_state.selected_location else default_location
 
     # Reef overlay
-    m = folium.Map(location=map_center, zoom_start=3, width="100%", height=550, tiles="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", attr="Reef Overlay")
+    m = folium.Map(
+        location=map_center,
+        zoom_start=3,
+        width="100%",
+        height=550,
+        tiles="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+        attr="Reef Overlay"
+    )
     if st.session_state.selected_location:
         folium.Marker(
             location=[st.session_state.selected_location["lat"], st.session_state.selected_location["lon"]],
@@ -79,10 +124,8 @@ with col_inputs:
     with st.form("prediction_input_form"):
         st.subheader("Required Prediction Inputs")
         input_date = st.date_input("Observation Date", dt_date.today())
-
         current_lat = st.session_state.selected_location["lat"] if st.session_state.selected_location else 0.0
         current_lon = st.session_state.selected_location["lon"] if st.session_state.selected_location else 0.0
-
         input_lat = st.number_input("Latitude", value=current_lat, format="%.6f")
         input_lon = st.number_input("Longitude", value=current_lon, format="%.6f")
         st.session_state.selected_location = {"lat": input_lat, "lon": input_lon}
@@ -123,50 +166,14 @@ with col_inputs:
 
         form_submitted = st.form_submit_button("RUN PREDICTION", type="primary", help="Run bleaching prediction now!")
 
-# --- NOAA DATA FETCH ---
-def fetch_noaa_data(date: dt, lat: float, lon: float) -> dict:
-    """Fetch NOAA 5km Coral Reef Watch data via ERDDAP."""
-    import pandas as pd
-    date_str = date.strftime("%Y-%m-%dT00:00:00Z")
-    erddap_url = (
-        f"https://coastwatch.noaa.gov/erddap/griddap/coral_reef_watch_5km.csv?"
-        f"SST[({date_str})][({lat}):1:({lat})][({lon}):1:({lon})],"
-        f"ClimSST[({date_str})][({lat}):1:({lat})][({lon}):1:({lon})],"
-        f"BleachingAlertStatus[({date_str})][({lat}):1:({lat})][({lon}):1:({lon})]"
-    )
-    try:
-        df = pd.read_csv(erddap_url, skiprows=[1])
-        latest = df.iloc[-1].to_dict()
-        return {
-            'Distance_to_Shore': 10.0,
-            'Turbidity': 2.5,
-            'Cyclone_Frequency': 0.1,
-            'Depth_m': 15.0,
-            'ClimSST': latest.get('ClimSST', 26.0),
-            'Temperature_Kelvin': latest.get('SST', 300.0),
-            'Temperature_Kelvin_Standard_Deviation': 1.5,
-            'Windspeed': 5.0
-        }
-    except Exception as e:
-        st.warning(f"Could not fetch NOAA data. Using default/fallbacks. Error: {e}")
-        return {
-            'Distance_to_Shore': 10.0,
-            'Turbidity': 2.5,
-            'Cyclone_Frequency': 0.1,
-            'Depth_m': 15.0,
-            'ClimSST': 26.0,
-            'Temperature_Kelvin': 300.0,
-            'Temperature_Kelvin_Standard_Deviation': 1.5,
-            'Windspeed': 5.0
-        }
-
 # --- SUBMISSION HANDLER ---
 if form_submitted:
+    # Cosmetic validation
     if input_lat is None or input_lon is None:
         st.error("Please provide a valid location.")
         st.stop()
     if prediction_type in ("Multi-Modal Fusion (Image + Data)", "Image-Only (VGG Augmented)") and not uploaded_file:
-        st.error("Please upload an image for prediction.")
+        st.error("Please upload an image for image-based prediction.")
         st.stop()
 
     loader_placeholder = st.empty()
@@ -174,36 +181,44 @@ if form_submitted:
     <div class="fish-loader-container">
         <div class="fish-loader"></div>
         <p style="text-align:center; color:#004d40; font-weight:bold; margin-top: 30px;">
-            Running prediction and fetching NOAA data...
+            Running prediction and fetching environmental data from API...
         </p>
     </div>
     """, unsafe_allow_html=True)
 
-    if prediction_type != "Image-Only (VGG Augmented)":
-        aux_data = fetch_noaa_data(input_date, input_lat, input_lon)
-        if override_data:
-            aux_data.update(override_features)
-    else:
-        aux_data = {}
-
-    payload = {"prediction_type": prediction_type, "tabular_data": aux_data}
+    # --- Build Payload for Backend ---
+    final_override_data = override_features if override_data and override_features else None
+    payload = {
+        "prediction_type": prediction_type,
+        "lat": input_lat,
+        "lon": input_lon,
+        "date": str(input_date),
+        "override_data": final_override_data
+    }
     files = {}
     if uploaded_file:
         files["image_file"] = (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)
 
+    # --- API Request ---
     try:
-        response = requests.post(f"{API_URL}predict", data={"payload": json.dumps(payload)}, files=files)
+        full_url = f"{API_URL}/predict"
+        response = requests.post(full_url, data={"payload": json.dumps(payload)}, files=files, timeout=30)
         response.raise_for_status()
         api_result = response.json()
+    except requests.exceptions.HTTPError as e:
+        loader_placeholder.empty()
+        error_detail = response.json().get("detail", "Unknown API error.") if response.content else "No response body."
+        st.error(f"Prediction API Error ({response.status_code}): {error_detail}")
+        st.stop()
     except Exception as e:
         loader_placeholder.empty()
-        st.error(f"Prediction API request failed: {e}")
+        st.error(f"Prediction API request failed. Check the endpoint URL: {full_url}. Error: {e}")
         st.stop()
 
     loader_placeholder.empty()
-
     st.success("Prediction Complete!")
 
+    # --- Bubble Animation ---
     def show_bubbles(num_bubbles=50, width="100%", height=400):
         components.html(f"""
         <div id="particles-js" style="position:relative; width:{width}; height:{height}px;"></div>
@@ -238,20 +253,37 @@ if form_submitted:
 
     show_bubbles(num_bubbles=80, height=500)
 
-    st.write(f"**Date:** {input_date}")
-    st.write(f"**Latitude:** {input_lat}")
-    st.write(f"**Longitude:** {input_lon}")
-    st.write(f"**Prediction Type:** {prediction_type}")
+    # --- Display Results ---
+    st.write(f"**Date:** {api_result['input_data']['date']}")
+    st.write(f"**Latitude:** {api_result['input_data']['latitude']}")
+    st.write(f"**Longitude:** {api_result['input_data']['longitude']}")
+    st.write(f"**Prediction Type:** {api_result['mode_used']}")
 
-    if "predicted_bleaching_risk" in api_result:
-        risk = api_result["predicted_bleaching_risk"]
-        level = "High Risk" if risk>70 else ("Moderate Risk" if risk>40 else "Low Risk")
+    if "prediction" in api_result:
+        prediction_data = api_result["prediction"]
+        risk = prediction_data.get("predicted_bleaching_risk", 0.0)
+        classification = prediction_data.get("classification", "Unknown")
+        if "Bleached" in classification:
+            color = "#f44336"
+            icon = "🔥"
+        else:
+            color = "#4CAF50"
+            icon = "✅"
+        st.markdown(f"""
+<p style='text-align:center; font-size:24px; color:{color}; font-weight:bold;'>{icon} CLASSIFICATION: {classification.upper()} {icon}</p>
+""", unsafe_allow_html=True)
+        level = "High Risk" if risk > 70 else ("Moderate Risk" if risk > 40 else "Low Risk")
         st.metric("Predicted Bleaching Risk", f"{risk:.1f}%", level)
 
     if uploaded_file:
         st.subheader("Uploaded Coral Image")
+        uploaded_file.seek(0)
         st.image(uploaded_file, width=350)
 
+    st.markdown("---")
+    fact = get_random_fact()
+    st.info(f"Did you know: {fact}")
+    st.markdown("---")
     st.subheader("Prediction Details")
     st.json(api_result)
 
@@ -266,4 +298,3 @@ with colM:
 * No data is stored or logged.
 * All processing occurs in-memory and is wiped after generating the prediction.
 """)
-

@@ -73,11 +73,16 @@ The core functionality of this package is the training and comparison of the dee
 
 ### Model Training Pipeline
 
-The script runs three distinct training experiments:
+
+For Images: The script runs three distinct training experiments:
 
 1.  **Baseline CNN:** A custom-built convolutional network.
-2.  **VGG16 Frozen:** Transfer learning using a pre-trained VGG16 base (frozen) for feature extraction.
+2.  **VGG16:** Transfer learning using a pre-trained VGG16 base (frozen) for feature extraction.
 3.  **VGG16 Augmented:** The VGG16 model combined with on-the-fly Data Augmentation (random rotation, zoom, and flip) for enhanced robustness.
+
+For Tabular: The script runs through a preprocessor anthen training experiment:
+
+- **Tabular:** 
 
 To run the full training pipeline, execute the main script:
 bash
