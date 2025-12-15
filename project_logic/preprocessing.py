@@ -29,6 +29,12 @@ class TabularInput(BaseModel):
     Exposure: str
 
 
+
+# -----------------------------------------------------------------------
+#                           PREPROCESSING: IMAGES
+# -----------------------------------------------------------------------
+
+
 def load_img(img_bytes: bytes):
 
     img = Image.open(io.BytesIO(img_bytes))
@@ -47,6 +53,13 @@ def load_img(img_bytes: bytes):
     print("✅ Image successfully reshaped as ndarray of shape", img.shape)
 
     return img
+
+
+
+# -----------------------------------------------------------------------
+#                       PREPROCESSING : TABULAR
+# -----------------------------------------------------------------------
+# Note that the preproc.dill loaded below was fitted using the functions in tabular_preproc.py
 
 
 def load_tabular_preproc():
