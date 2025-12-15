@@ -13,7 +13,6 @@ import random
 import base64
 from io import BytesIO
 
-
 def img_to_bytes(img: Image.Image) -> str:
     buffered = BytesIO()
     img.save(buffered, format="PNG")
@@ -27,7 +26,7 @@ NOAA_DATA_SOURCE_URL = "https://coralreefwatch.noaa.gov/product/5km/index.php#da
 CORAL_FACTS = [
     " Coral bleaching occurs when corals expel the algae (zooxanthellae) that live in their tissues, causing the coral to turn white.",
     " The primary cause of coral bleaching is rising sea temperatures, often linked to climate change.",
-    " Bleached corals are not dead; but they are under more stress and are at a higher risk of mortality.",
+    " Bleached corals are not dead, but they are under more stress and are at a higher risk of mortality.",
     " Increased sea surface temperatures are the most common cause of coral bleaching.",
     " Pollution from agricultural runoff and sewage can also lead to coral bleaching.",
     " Overexposure to sunlight, especially during low tides, can cause corals to bleach.",
@@ -54,7 +53,6 @@ CORAL_FACTS = [
 ]
 
 def get_random_fact():
-    """Returns a random fact from the CORAL_FACTS list."""
     return random.choice(CORAL_FACTS)
 
 # --- PAGE SETUP ---
@@ -70,10 +68,6 @@ st.markdown("""
 .stApp { background-color: #ffffff; color:#004d40; }
 h1,h2,h3,h4,h5,h6{color:#004d40 !important;}
 button[data-testid*="stFormSubmitButton"] { background-color: darkorange !important; color: white !important; font-weight:bold !important; font-size:16px !important; padding:10px 22px !important; border-radius:8px !important; border:none !important; margin-left:auto !important; margin-right:auto !important; display:block !important; }
-.fish-loader-container { width:100%; height:50px; overflow:hidden; position:relative; margin:20px 0; background:transparent; }
-.fish-loader { width:50px; height:30px; background-color:#ff8f00; border-radius:50% 50% 50% 50% / 60% 60% 40% 40%; position:absolute; left:-100px; animation:swim 3s linear infinite; transform:rotate(-5deg);}
-.fish-loader::after { content:''; position:absolute; top:5px; left:45px; width:20px; height:15px; background-color:#ff8f00; border-radius:50% / 0 100% 0 100%; transform:rotate(45deg);}
-@keyframes swim {0%{left:-10%;}100%{left:110%;}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -83,26 +77,17 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Centered image (KEEPING ORIGINAL BASE64 RENDERING LOGIC)
-try:
-    # NOTE: This requires 'reefmix.jpg' to be in the local directory when run,
-    # which is the user's intended implementation.
-    img = Image.open("reefmix.jpg")
-    img_src = f'data:image/png;base64,{img_to_bytes(img)}'
-except FileNotFoundError:
-    # Fallback if image file is not found in this environment
-    img_src = "https://placehold.co/1050x300/4eb3e3/ffffff?text=Image+reefmix.jpg+Placeholder"
-
+# Centered image
+img = Image.open("reefmix.jpg")
 st.markdown(
     f"""
     <div style='text-align:center;'>
-        <img src='{img_src}'
+        <img src='data:image/png;base64,{img_to_bytes(img)}'
              style='max-width:90%; height:auto;' />
     </div>
     """,
     unsafe_allow_html=True
 )
-
 
 # Centered descriptive sentence
 st.markdown(
@@ -114,8 +99,7 @@ st.markdown("---")
 
 # --- SESSION STATE ---
 if "selected_location" not in st.session_state:
-    # Initialize with a dictionary structure to avoid key errors later
-    st.session_state.selected_location = {"lat": 0.0, "lon": 0.0}
+    st.session_state.selected_location = None
 
 # --- LAYOUT COLUMNS ---
 col_map, col_inputs = st.columns([3,1])
@@ -157,7 +141,7 @@ with col_map:
 
     # --- RESULTS ROW ---
     st.markdown("---")
-    st.markdown("## Results:") # Page break + Results title
+    st.markdown("## Results:")
 
 # --- INPUT FORM COLUMN ---
 with col_inputs:
@@ -176,7 +160,7 @@ with col_inputs:
             "Choose prediction mode:",
             ("Multi-Modal Fusion (Image + Data)", "Image-Only (Baseline)", "Tabular-Only", "Manual Data Entry Only (No NOAA Pull)"),
             index=0,
-            horizontal=False # Changed to vertical for better UI flow in small column
+            horizontal=True
         )
 
         st.markdown("---")
@@ -206,52 +190,14 @@ with col_inputs:
 
         form_submitted = st.form_submit_button("RUN PREDICTION", type="primary", help="Run bleaching prediction now!")
 
-# --- CUSTOM BUBBLE ANIMATION FUNCTION (Moved outside if block for clarity, but definition is identical) ---
-
-def show_bubbles(num_bubbles=50, width="100%", height=400):
-    components.html(f"""
-    <div id="particles-js" style="position:relative; width:{width}; height:{height}px;"></div>
-    <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
-    <script>
-    particlesJS("particles-js", {{
-        "particles": {{
-            "number": {{ "value": {num_bubbles} }},
-            "color": {{ "value": "#00c8ff" }},
-            "shape": {{ "type": "circle" }},
-            "opacity": {{ "value": 0.6 }},
-            "size": {{ "value": 10, "random": true }},
-            "line_linked": {{ "enable": false }},
-            "move": {{
-                "enable": true,
-                "speed": 2,
-                "direction": "top",
-                "random": true,
-                "out_mode": "out"
-            }}
-        }},
-        "interactivity": {{
-            "events": {{
-                "onhover": {{ "enable": false }},
-                "onclick": {{ "enable": false }}
-            }}
-        }},
-        "retina_detect": true
-    }});
-    </script>
-    """, height=height)
-
-
-# --- SUBMISSION HANDLER (FIXED ROUTING AND PARSING) ---
+# --- SUBMISSION HANDLER ---
 if form_submitted:
-    # 1. Validation
+    # Validation
     if input_lat is None or input_lon is None:
         st.error("Please provide a valid location.")
         st.stop()
     if prediction_type in ("Multi-Modal Fusion (Image + Data)", "Image-Only (Baseline)") and not uploaded_file:
         st.error("Please upload an image for image-based prediction.")
-        st.stop()
-    if prediction_type == "Manual Data Entry Only (No NOAA Pull)" and not override_features:
-        st.error("Please enter manual data for this prediction mode.")
         st.stop()
 
     loader_placeholder = st.empty()
@@ -270,51 +216,40 @@ if form_submitted:
 }
 .octopus {
     animation: swim 7s linear infinite;
-    transform: scale(1.25);
-    filter: hue-rotate(260deg) saturate(3) brightness(1);
+    transform: scale(1.25); /* 25% larger */
+    filter: hue-rotate(260deg) saturate(3) brightness(1); /* purple #7547d1 */
 }
 </style>
 """, unsafe_allow_html=True)
 
-    # 2. Dynamic Endpoint and Request Construction
-    api_call_kwargs = {}
-
-    # Modes requiring Tabular Endpoint
-    if prediction_type in ("Tabular-Only", "Manual Data Entry Only (No NOAA Pull)"):
-        endpoint = "/predict/tabular"
-
-        # Prepare the request body for the /predict/tabular endpoint
-        tabular_payload = {
-            "latitude": input_lat,
-            "longitude": input_lon,
-            "date": str(input_date),
-            **(override_features if override_features else {}) # Merge manual overrides
-        }
-        # Send as JSON body for the POST request
-        api_call_kwargs = {"json": tabular_payload}
-
-    # Modes requiring Image Endpoint
-    elif prediction_type in ("Multi-Modal Fusion (Image + Data)", "Image-Only (Baseline)"):
-        endpoint = "/predict/image"
-
-        # Prepare the image file for the /predict/image endpoint
+    # --- Determine endpoint & payload ---
+    if prediction_type in ("Multi-Modal Fusion (Image + Data)", "Image-Only (Baseline)") and uploaded_file:
+        # Image endpoint
+        endpoint = f"{API_URL}/predict/image"
         files = {"image_file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
-        # Send as multipart/form-data (only the file)
-        api_call_kwargs = {"files": files}
-
+        params = {"model_name": "baseline"}  # optional
+        json_payload = None
     else:
-        loader_placeholder.empty()
-        st.error(f"Internal routing error for prediction type: {prediction_type}")
-        st.stop()
+        # Tabular endpoint
+        endpoint = f"{API_URL}/predict/tabular"
+        final_override_data = override_features if override_data and override_features else {}
+        json_payload = {
+            "lat": input_lat,
+            "lon": input_lon,
+            "date": str(input_date),
+            **final_override_data
+        }
+        files = None
+        params = None
 
-    # 3. Make API Request
+    # --- API Request ---
     try:
-        full_url = f"{API_URL}{endpoint}"
-
-        response = requests.post(full_url, timeout=30, **api_call_kwargs)
+        if files:
+            response = requests.post(endpoint, files=files, params=params, timeout=30)
+        else:
+            response = requests.post(endpoint, json=json_payload, timeout=30)
         response.raise_for_status()
         api_result = response.json()
-
     except requests.exceptions.HTTPError as e:
         loader_placeholder.empty()
         error_detail = response.json().get("detail", "Unknown API error.") if response.content else "No response body."
@@ -322,105 +257,76 @@ if form_submitted:
         st.stop()
     except Exception as e:
         loader_placeholder.empty()
-        st.error(f"Prediction API request failed. Check the endpoint URL: {full_url}. Error: {e}")
+        st.error(f"Prediction API request failed. Check the endpoint URL: {endpoint}. Error: {e}")
         st.stop()
 
     loader_placeholder.empty()
     st.success("Prediction Complete!")
 
-    # 4. Display Results in col_map Results row (FIXED DISPLAY LOGIC)
+    # --- Display Results in col_map Results row ---
     with col_map:
         # Bubble Animation
+        def show_bubbles(num_bubbles=50, width="100%", height=400):
+            components.html(f"""
+            <div id="particles-js" style="position:relative; width:{width}; height:{height}px;"></div>
+            <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+            <script>
+            particlesJS("particles-js", {{
+              "particles": {{
+                "number": {{ "value": {num_bubbles} }},
+                "color": {{ "value": "#00c8ff" }},
+                "shape": {{ "type": "circle" }},
+                "opacity": {{ "value": 0.6 }},
+                "size": {{ "value": 10, "random": true }},
+                "line_linked": {{ "enable": false }},
+                "move": {{
+                  "enable": true,
+                  "speed": 2,
+                  "direction": "top",
+                  "random": true,
+                  "out_mode": "out"
+                }}
+              }},
+              "interactivity": {{
+                "events": {{
+                  "onhover": {{ "enable": false }},
+                  "onclick": {{ "enable": false }}
+                }}
+              }},
+              "retina_detect": true
+            }});
+            </script>
+            """, height=height)
+
         show_bubbles(num_bubbles=80, height=500)
 
-        # Display Prediction Result Card
-        if "prediction" in api_result:
-            prediction_data = api_result["prediction"]
+        # --- Display Prediction ---
+    if "prediction" in api_result:
+        pred = api_result["prediction"]
+        if isinstance(pred, dict) and "predicted_class" in pred:
+            predicted_class = pred["predicted_class"]
+            probability = pred.get(f"probability_{predicted_class.lower()}", None)
+            prob_percent = f"{probability*100:.1f}%" if probability is not None else "N/A"
+        else:
+            # fallback for legacy format
+            predicted_class = "Bleached" if pred else "Healthy"
+            prob_percent = "N/A"
 
-            # --- API Key Parsing for Binary Classification ---
-            classification = prediction_data.get("predicted_class", "Error: No Class")
-            probability_bleached = prediction_data.get("probability_bleached", 0.0)
-            probability_unbleached = prediction_data.get("probability_unbleached", 0.0)
-            risk = probability_bleached * 100 # Convert probability to percentage
-            # ------------------------------------------------
+    st.subheader("Prediction Result")
+    st.markdown(
+        f"<h2 style='text-align:center; color:#d32f2f;'>{predicted_class} ({prob_percent})</h2>",
+        unsafe_allow_html=True
+    )
 
-            # Determine visual style
-            if "Bleached" in classification:
-                color = "#f44336" # Red
-                icon = "🔥"
-            else:
-                color = "#4CAF50" # Green
-                icon = "✅"
-
-            # Set risk level text based on risk percentage
-            level = "High Risk" if risk > 70 else ("Moderate Risk" if risk > 40 else "Low Risk")
-
-            st.markdown(f"""
-            <div style="background-color: {color}; color: white; padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 20px;">
-                <h2 style="color: white; margin: 0;">{icon} CLASSIFICATION: {classification.upper()} {icon}</h2>
-            </div>
-            """, unsafe_allow_html=True)
-
-            # Main Risk Metric
-            st.metric("Predicted Bleaching Risk", f"{risk:.1f}%", level)
-
-            st.markdown("---")
-            st.subheader("Prediction Confidence Breakdown")
-
-            prob_healthy = probability_unbleached * 100
-
-            col_p1, col_p2 = st.columns(2)
-
-            with col_p1:
-                st.markdown(f"""
-                <div style="background-color: #e8f5e9; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #4CAF50;">
-                    <p style="margin: 0; font-size: 14px; color: #388e3c; font-weight: bold;">Probability Healthy/Unbleached</p>
-                    <h3 style="margin: 5px 0 0; color: #1b5e20;">{prob_healthy:.2f}%</h3>
-                </div>
-                """, unsafe_allow_html=True)
-
-            with col_p2:
-                st.markdown(f"""
-                <div style="background-color: #ffebee; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #f44336;">
-                    <p style="margin: 0; font-size: 14px; color: #d32f2f; font-weight: bold;">Probability Bleached</p>
-                    <h3 style="margin: 5px 0 0; color: #b71c1c;">{risk:.2f}%</h3>
-                </div>
-                """, unsafe_allow_html=True)
-
-            st.markdown("---")
-
-
-        st.subheader("Input & Metadata")
-
-        # Use 'input_data' key for metadata display
-        input_display_data = api_result.get("input_data", {})
-
-        st.markdown(f"**Date:** `{input_display_data.get('date', str(input_date))}`")
-        st.markdown(f"**Prediction Mode:** `{api_result.get('mode_used', prediction_type)}`")
-
-        col_meta_1, col_meta_2 = st.columns(2)
-        with col_meta_1:
-            st.markdown(f"**Latitude:** `{input_display_data.get('latitude', input_lat):.4f}`")
-        with col_meta_2:
-            st.markdown(f"**Longitude:** `{input_display_data.get('longitude', input_lon):.4f}`")
-
-        if uploaded_file:
-            st.markdown("#### Uploaded Coral Image Preview")
-            uploaded_file.seek(0)
-            st.image(uploaded_file, width=350)
-
-        # Display environmental data used, if any
-        # Filter out geo/date metadata to only show environmental features
-        environmental_features = {k: v for k, v in input_display_data.items() if k not in ["latitude", "longitude", "date"]}
-        if environmental_features:
-            st.markdown("#### Environmental Data Used:")
-            df_env = pd.DataFrame(list(environmental_features.items()), columns=['Feature', 'Value'])
-            st.table(df_env)
+    if uploaded_file:
+        uploaded_file.seek(0)
+        st.subheader("Uploaded Coral Image")
+        st.image(uploaded_file, width=350)
 
         fact = get_random_fact()
         st.info(f"Did you know: {fact}")
         st.markdown("---")
-        st.subheader("Full API Response (Debug)")
+        st.subheader("Prediction Details (Raw API Response)")
         st.json(api_result)
 
 # --- FOOTER ---
