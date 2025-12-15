@@ -73,7 +73,7 @@ button[data-testid*="stFormSubmitButton"] { background-color: darkorange !import
 col1, col2, col3 = st.columns([1, 8, 1])
 with col2:
     st.title("🌊 ReefSight: Multi-Modal Coral Bleaching Prediction")
-    st.image("Great-Barrier-Reef.jpg", caption="A healthy Great Barrier Reef", width=1050)
+    st.image("reef3.jpg", caption="A healthy Great Barrier Reef", width=1050)
     st.markdown(
         "<p style='text-align:center;'>Welcome to ReefSight. Analyze coral health using images, environmental data, or both.</p>",
         unsafe_allow_html=True
@@ -178,13 +178,27 @@ if form_submitted:
 
     loader_placeholder = st.empty()
     loader_placeholder.markdown("""
-    <div class="fish-loader-container">
-        <div class="fish-loader"></div>
-        <p style="text-align:center; color:#004d40; font-weight:bold; margin-top: 30px;">
-            Running prediction and fetching environmental data from API...
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+<div style="width:100%; height:60px; overflow:hidden; position:relative; background:transparent;">
+    <div class="octopus" style="font-size:50px; position:absolute; left:-60px;">🐙</div>
+    <p style="text-align:center; color:#004d40; font-weight:bold; margin-top:10px;">
+        Running prediction and fetching environmental data...
+    </p>
+</div>
+
+<style>
+@keyframes swim {
+    0% { left: -60px; }
+    100% { left: 100%; }
+}
+.octopus {
+    animation: swim 3s linear infinite;
+    transform: scale(1.25); /* 25% larger */
+    filter: hue-rotate(260deg) saturate(3) brightness(1); /* approximates purple #7547d1 */
+}
+</style>
+""", unsafe_allow_html=True)
+
+
 
     # --- Build Payload for Backend ---
     final_override_data = override_features if override_data and override_features else None
@@ -259,21 +273,13 @@ if form_submitted:
     st.write(f"**Longitude:** {api_result['input_data']['longitude']}")
     st.write(f"**Prediction Type:** {api_result['mode_used']}")
 
-    if "prediction" in api_result:
-        prediction_data = api_result["prediction"]
-        risk = prediction_data.get("predicted_bleaching_risk", 0.0)
-        classification = prediction_data.get("classification", "Unknown")
-        if "Bleached" in classification:
-            color = "#f44336"
-            icon = "🔥"
-        else:
-            color = "#4CAF50"
-            icon = "✅"
-        st.markdown(f"""
-<p style='text-align:center; font-size:24px; color:{color}; font-weight:bold;'>{icon} CLASSIFICATION: {classification.upper()} {icon}</p>
-""", unsafe_allow_html=True)
-        level = "High Risk" if risk > 70 else ("Moderate Risk" if risk > 40 else "Low Risk")
-        st.metric("Predicted Bleaching Risk", f"{risk:.1f}%", level)
+        # --- Multi-Modal Fusion Detail ---
+    if api_result["mode_used"] == "Multi-Modal Fusion (Image + Data)":
+        fusion = prediction_data.get("fusion_detail", {})
+        if fusion:
+            st.subheader("Fusion Details")
+            st.write(f"**Tabular Risk:** {fusion.get('tabular_risk', 0.0)}%")
+            st.write(f"**Image Risk:** {fusion.get('image_risk', 0.0)}%")
 
     if uploaded_file:
         st.subheader("Uploaded Coral Image")
