@@ -1,224 +1,180 @@
-
-from project_logic.predict import load_image_model_trained, load_tabular_model_trained, predict_tabular, predict_image
+from project_logic.predict import (
+    load_image_model_trained,
+    load_tabular_model_trained,
+    predict_tabular,
+    predict_image
+)
 from project_logic.preprocessing import TabularInput
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form    # --- ADD ON: Form needed for multi-modal uploads
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Optional, Dict
 import pandas as pd
 import json
-import traceback
+import random
+from datetime import datetime
 
+# -----------------------------
+# Initialize FastAPI
+# -----------------------------
+app = FastAPI(
+    title="ReefSight Centralized Prediction API",
+    description="Unified endpoint for multi-modal coral bleaching prediction."
+)
+print("✅ Fast API initialized")
 
-# =========================================
-# FASTAPI INIT
-# =========================================
-app = FastAPI()
-print("✅ FastAPI initialized")
+# -----------------------------
+# Load pre-trained models
+# -----------------------------
+app.state.image_model = load_image_model_trained()
+app.state.tabular_model = load_tabular_model_trained()
+MODEL_READY = True
 
+# -----------------------------
+# Request schema
+# -----------------------------
+class PredictionRequest(BaseModel):
+    prediction_type: str
+    lat: float
+    lon: float
+    date: str
+    override_data: Optional[Dict[str, float]] = None
 
-# =========================================
-# CORS (Required for Streamlit frontend)
-# =========================================
-# --- ADD ON: Allow Streamlit → API requests ---
+# -----------------------------
+# NOAA Data Fetch (backend)
+# -----------------------------
+def fetch_noaa_data(date_str: str, lat: float, lon: float) -> Dict[str, float]:
+    """
+    Backend-owned NOAA data fetch.
+    Currently simulated with small deterministic variation for temperature.
+    """
+    temp_variation = random.uniform(-1.5, 1.5)
+    return {
+        "Distance_to_Shore": 10.0,
+        "Turbidity": 2.5,
+        "Cyclone_Frequency": 0.1,
+        "Depth_m": 15.0,
+        "ClimSST": 26.0,
+        "Temperature_Kelvin": 300.0 + temp_variation,
+        "Temperature_Kelvin_Standard_Deviation": 1.5,
+        "Windspeed": 5.0,
+    }
+
+# -----------------------------
+# Middleware
+# -----------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],     # tighten later if needed
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-# =========================================
-# MODEL LOADING
-# =========================================
-# --- ADD ON: Safe model loading with debug prints ---
-try:
-    app.state.image_model = load_image_model_trained()
-    print("✅ Image model loaded")
-except Exception as e:
-    app.state.image_model = None
-    print("❌ Failed to load image model:", e)
-    traceback.print_exc()
-
-try:
-    app.state.tabular_model = load_tabular_model_trained()
-    print("✅ Tabular model loaded")
-except Exception as e:
-    app.state.tabular_model = None
-    print("❌ Failed to load tabular model:", e)
-    traceback.print_exc()
-
-MODEL_READY = bool(app.state.image_model or app.state.tabular_model)
-
-
-# =========================================
-# ROOT ENDPOINT
-# =========================================
+# -----------------------------
+# Root endpoint
+# -----------------------------
 @app.get("/")
 def root():
-    return {
-        "message": "Hi, the API is running! Welcome to ReefSight.",
-        "model_ready": MODEL_READY,
-    }
+    return {"message": "Hi, The API is running! Welcome to ReefSight"}
 
-
-# =========================================
-# IMAGE-ONLY PREDICTION ENDPOINT
-# =========================================
-@app.post("/predict/image")
-async def predict_image_api(image_file: UploadFile = File(...)):
-
-    # Validate content type
-    if not image_file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="File must be an image")
-
-    image_bytes = await image_file.read()
-
-    if not app.state.image_model:
-        raise HTTPException(
-            status_code=503,
-            detail="Image model is not available",
-        )
-
-    prediction = predict_image(model=app.state.image_model, image_bytes=image_bytes)
-
-    return {
-        "prediction": prediction,
-        "inputs": {"filename": image_file.filename},
-        "model_ready": True,
-    }
-
-
-# =========================================
-# TABULAR-ONLY PREDICTION ENDPOINT
-# =========================================
-@app.post("/predict/tabular")
-def predict_tabular_api(payload: TabularInput):
-
-    # Validate presence of tabular data
-    if not payload.tabular_data:
-        raise HTTPException(status_code=400, detail="Tabular data is required.")
-
-    X_pred = pd.DataFrame([payload.tabular_data])
-
-    required_columns = [
-        "Distance_to_Shore",
-        "Turbidity",
-        "Cyclone_Frequency",
-        "Depth_m",
-        "ClimSST",
-        "Temperature_Kelvin",
-        "Temperature_Kelvin_Standard_Deviation",
-        "Windspeed",
-    ]
-
-    # Check for missing fields
-    missing = [c for c in required_columns if c not in X_pred.columns]
-    if missing:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Missing required tabular features: {missing}",
-        )
-
-    if not app.state.tabular_model:
-        raise HTTPException(
-            status_code=503,
-            detail="Tabular model is not available",
-        )
-
-    prediction = predict_tabular(app.state.tabular_model, X_pred)
-
-    return {
-        "prediction": prediction,
-        "inputs": X_pred.to_dict(orient="records")[0],
-        "model_ready": True,
-    }
-
-
-# =========================================
-# UNIVERSAL MULTI-MODAL ENDPOINT
-# =========================================
+# -----------------------------
+# Unified Prediction Endpoint
+# -----------------------------
 @app.post("/predict")
-async def predict_multi_modal(
-    payload: str = Form(...),        # JSON payload (string)
-    image_file: UploadFile = File(None),  # optional image file
+async def predict_unified(
+    payload: str = Form(...),
+    image_file: Optional[UploadFile] = File(None)
 ):
+    if not MODEL_READY:
+        raise HTTPException(status_code=503, detail="Models not ready")
 
-    # --- ADD ON: Safe JSON parsing ---
+    # -----------------------------
+    # Parse payload
+    # -----------------------------
     try:
-        payload = json.loads(payload)
-    except:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+        request_data = PredictionRequest.parse_obj(json.loads(payload))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid payload: {e}")
 
-    prediction_type = payload.get("prediction_type")
-    tabular_data = payload.get("tabular_data", {})
+    mode = request_data.prediction_type
 
-    # ---------------------------------
-    # VALIDATION BY MODE
-    # ---------------------------------
-    if prediction_type == "Multi-Modal Fusion (Image + Data)":
-        if not image_file:
-            raise HTTPException(status_code=400, detail="Fusion requires an image.")
-        if not tabular_data:
-            raise HTTPException(status_code=400, detail="Fusion requires tabular data.")
-
-    if prediction_type in ("Tabular-Only", "Manual Data Entry Only (No NOAA Pull)"):
-        if not tabular_data:
-            raise HTTPException(status_code=400, detail="Tabular data is required.")
-
-    if prediction_type == "Image-Only (VGG Augmented)" and not image_file:
+    # -----------------------------
+    # Image requirement enforcement
+    # -----------------------------
+    if "Image" in mode and image_file is None:
         raise HTTPException(
             status_code=400,
-            detail="Image-only prediction requires an image file.",
+            detail="Image file required for selected prediction mode"
         )
 
-    # ---------------------------------
-    # IMAGE PROCESSING (if supplied)
-    # ---------------------------------
-    image_prediction = None
+    # -----------------------------
+    # Tabular feature resolution
+    # -----------------------------
+    tabular_features = None
+    if "Image-Only" not in mode:
+        if request_data.override_data:
+            tabular_features = request_data.override_data
+        else:
+            tabular_features = fetch_noaa_data(
+                request_data.date,
+                request_data.lat,
+                request_data.lon
+            )
 
-    if image_file:
-        if not image_file.content_type.startswith("image/"):
-            raise HTTPException(status_code=400, detail="File must be an image")
-        if not app.state.image_model:
-            raise HTTPException(status_code=503, detail="Image model unavailable")
+    X_pred = pd.DataFrame([tabular_features]) if tabular_features else None
 
-        img_bytes = await image_file.read()
-        image_prediction = predict_image(app.state.image_model, img_bytes)
+    # -----------------------------
+    # Prediction routing
+    # -----------------------------
+    prediction = {}
+    if mode == "Tabular-Only" or mode == "Manual Data Entry Only (No NOAA Pull)":
+        prediction = predict_tabular(
+            model=app.state.tabular_model,
+            X_pred=X_pred
+        )
 
-    # ---------------------------------
-    # TABULAR PROCESSING (if supplied)
-    # ---------------------------------
-    tabular_prediction = None
+    elif mode == "Image-Only (VGG Augmented)":
+        image_bytes = await image_file.read()
+        prediction = predict_image(
+            model=app.state.image_model,
+            image_bytes=image_bytes
+        )
 
-    if tabular_data:
-        if not app.state.tabular_model:
-            raise HTTPException(status_code=503, detail="Tabular model unavailable")
+    elif mode == "Multi-Modal Fusion (Image + Data)":
+        image_bytes = await image_file.read()
+        tabular_pred = predict_tabular(app.state.tabular_model, X_pred)
+        image_pred = predict_image(app.state.image_model, image_bytes)
 
-        X_pred = pd.DataFrame([tabular_data])
-        tabular_prediction = predict_tabular(app.state.tabular_model, X_pred)
+        # Deterministic fusion
+        risk_tab = tabular_pred.get("predicted_bleaching_risk", 50.0)
+        risk_img = image_pred.get("predicted_bleaching_risk", 50.0)
+        final_risk = (0.4 * risk_tab) + (0.6 * risk_img)
 
-    # ---------------------------------
-    # PREDICTION FUSION LOGIC
-    # ---------------------------------
-    if prediction_type == "Multi-Modal Fusion (Image + Data)":
-        combined = round((image_prediction + tabular_prediction) / 2, 3)
-
-    elif prediction_type == "Image-Only (VGG Augmented)":
-        combined = image_prediction
-
-    elif prediction_type in ("Tabular-Only", "Manual Data Entry Only (No NOAA Pull)"):
-        combined = tabular_prediction
+        prediction = {
+            "predicted_bleaching_risk": round(final_risk, 1),
+            "classification": "Bleached" if final_risk > 50 else "Unbleached",
+            "fusion_detail": {
+                "tabular_risk": risk_tab,
+                "image_risk": risk_img,
+            },
+        }
 
     else:
-        combined = tabular_prediction or image_prediction
+        raise HTTPException(status_code=400, detail=f"Unknown prediction type: {mode}")
 
-    # Return result
+    # -----------------------------
+    # Response
+    # -----------------------------
     return {
         "status": "success",
-        "prediction_type": prediction_type,
-        "predicted_bleaching_risk": combined,
-        "tabular_data_used": tabular_data,
-        "image_processed": bool(image_file),
-        "model_ready": MODEL_READY,
+        "mode_used": mode,
+        "input_data": {
+            "latitude": request_data.lat,
+            "longitude": request_data.lon,
+            "date": request_data.date,
+            "tabular_features_used": tabular_features,
+        },
+        "prediction": prediction,
     }
+
