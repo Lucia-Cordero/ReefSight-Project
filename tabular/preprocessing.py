@@ -26,7 +26,7 @@ def data_cleanup(df):
     """
     Docstring for data_cleanup:
 
-    param df: input dataframe
+    param df: input dataframes
     return: clean_df
     """
 
