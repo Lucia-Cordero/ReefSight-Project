@@ -21,7 +21,7 @@ def load_image_model_trained():
 
 
 def load_tabular_model_trained():
-    model_path = os.path.join("models", "best_model_tabular.dill")
+    model_path = os.path.join("models", "RandomForestClassifier.dill")
     with open(model_path, "rb") as f:
         tabular_model = dill.load(f)
     print('✅ Tabular_Model_loaded')
