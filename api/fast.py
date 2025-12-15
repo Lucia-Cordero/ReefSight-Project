@@ -1,4 +1,4 @@
-from project_logic.predict import load_image_model_trained, load_tabular_model_trained, predict_tabular, predict_image
+from project_logic.predict import load_image_models_trained, load_tabular_model_trained, predict_tabular, predict_image
 from project_logic.preprocessing import TabularInput
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,7 +11,7 @@ app = FastAPI()
 print('✅ Fast API initialized')
 
 # Pre-load trained models (image, tabular) into app.state
-app.state.image_model = load_image_model_trained()
+app.state.image_models = load_image_models_trained()
 app.state.tabular_model = load_tabular_model_trained()
 
 MODEL_READY=True
@@ -36,7 +36,7 @@ def root():
 
 # Image predict endpoint for https://our-domain.com/predict/image
 @app.post("/predict/image")
-async def predict_image_api(image_file: UploadFile= File(...)):
+async def predict_image_api(image_file: UploadFile= File(...), model_name: str = "vgg16"):
 
     # Make sure it's an image
     if not image_file.content_type.startswith("image/"):
@@ -55,7 +55,7 @@ async def predict_image_api(image_file: UploadFile= File(...)):
         }
 
     # Call prediction function "predict_image"
-    model = app.state.image_model
+    model = app.state.image_models[model_name]
     prediction = predict_image(model=model, image_bytes=image_bytes)
 
     return {

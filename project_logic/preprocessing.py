@@ -7,28 +7,25 @@ from PIL import Image
 import io
 import os
 
-
 class TabularInput(BaseModel):
-    Longitude_Degrees: float
-    year_norm: float
     Latitude_Degrees: float
-    Depth_m: float
+    Longitude_Degrees: float
+    Date_Year: float
+    Date_Month: float
     Distance_to_Shore: float
-    Temperature_Kelvin_Standard_Deviation: float
-    Temperature_Kelvin: float
-    TSA: float
-    Cyclone_Frequency: float
-    SSTA: float
-    ClimSST: float
-    Realm_Name: str
-    SSTA_DHW: float
-    month_cos: float
-    TSA_DHW: float
-    Exposure: float
-    Ocean_Name: str
-    Windspeed: float
-    month_sin: float
     Turbidity: float
+    Cyclone_Frequency: float
+    Depth_m: float
+    ClimSST: float
+    Temperature_Kelvin: float
+    Windspeed: float
+    SSTA: float
+    SSTA_DHW: float
+    TSA: float
+    TSA_DHW: float
+    Exposure: str
+
+
 
 def load_img(img_bytes: bytes):
 
@@ -51,7 +48,7 @@ def load_img(img_bytes: bytes):
 
 
 def load_tabular_preproc():
-    preprocessor_path = os.path.join("models", "preproc_tabular.dill")
+    preprocessor_path = os.path.join("models", "preproc.dill")
     with open(preprocessor_path, "rb") as f:
             preprocessor = dill.load(f)
 

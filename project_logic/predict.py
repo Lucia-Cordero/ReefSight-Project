@@ -13,15 +13,16 @@ from project_logic.preprocessing import preprocess_tabular
 #-----------------------MODEL_LOADING-------------------
 
 
-def load_image_model_trained():
-    model_path = os.path.join("models", "baseline_model.keras")
-    image_model = load_model(model_path)
-    print('✅ Image_Model_loaded')
-    return image_model
+def load_image_models_trained():
+    image_models = {}
+    image_models['baseline'] = load_model(os.path.join("models", "baseline_model.keras"))
+    image_models['vgg16'] = load_model(os.path.join("models", "vgg16_best.keras"))
+    print('✅ Image_Models_loaded')
+    return image_models
 
 
 def load_tabular_model_trained():
-    model_path = os.path.join("models", "best_model_tabular.dill")
+    model_path = os.path.join("models", "RandomForestClassifier.dill")
     with open(model_path, "rb") as f:
         tabular_model = dill.load(f)
     print('✅ Tabular_Model_loaded')
