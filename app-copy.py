@@ -25,7 +25,7 @@ NOAA_DATA_SOURCE_URL = "https://coralreefwatch.noaa.gov/product/5km/index.php#da
 img_url = "https://image2url.com/images/1765895634547-53b1795e-520b-477f-9fd4-7aa744291e4c.jpg"
 
 # Define User options list early for validation
-options_list = ("Multi-Modal Fusion (Image + Data)", "Image-Only (Baseline)", "Tabular-Only")
+options_list = ("Image", "Data", "Image+Data")
 
 # Header Image loader
 def load_image(url: str):
@@ -64,48 +64,6 @@ CORAL_FACTS = [
 def get_random_fact():
     return random.choice(CORAL_FACTS)
 
-# --- BUBBLE EFFECT ---
-def show_bubbles(num_bubbles: int, height: int):
-    html_content = f"""
-    <div style="width: 100%; height: {height}px; overflow: hidden; position: relative; background: #e0f7fa; border-radius: 10px; box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.1);">
-        <style>
-            .bubble-effect {{
-                position: absolute;
-                bottom: -10px;
-                background-color: rgba(174, 199, 248, 0.5);
-                border-radius: 50%;
-                opacity: 0.7;
-                animation: rise-simple linear infinite;
-            }}
-
-            @keyframes rise-simple {{
-                0% {{ transform: translateY(0); opacity: 0.7; }}
-                100% {{ transform: translateY(-{height}px); opacity: 0; }}
-            }}
-        </style>
-    """
-
-    bubble_divs = ""
-    for i in range(num_bubbles):
-        size = random.randint(15, 45) # Bubble size
-        left_pos = random.randint(0, 100) # Start position %
-        delay = random.uniform(0, 5) # Animation delay
-        duration = random.uniform(8, 20) # Animation duration
-
-        bubble_divs += f"""
-        <div class="bubble-effect" style="
-            width: {size}px;
-            height: {size}px;
-            left: {left_pos}%;
-            animation-delay: {delay}s;
-            animation-duration: {duration}s;
-        "></div>
-        """
-    html_content += bubble_divs
-    html_content += "</div>"
-
-    # Use components.html to inject the dynamic HTML/CSS
-    components.html(html_content, height=height + 10)
 
 # --- OCTOPUS LOADER ---
 def show_octopus_loader():
@@ -195,19 +153,22 @@ if "is_loading" not in st.session_state:
 
 # --- Validate and reset prediction_type if invalid ---
 if "prediction_type" not in st.session_state or st.session_state.prediction_type not in options_list:
-    st.session_state.prediction_type = "Multi-Modal Fusion (Image + Data)"
+    st.session_state.prediction_type = "Image+Data"
 
 if "has_manual_data" not in st.session_state:
     st.session_state.has_manual_data = "No (Pull NOAA Data)"
+
 if "mode_chosen_flag" not in st.session_state:
     st.session_state.mode_chosen_flag = False
 
 # --- HEADER ---
 st.markdown("<h1 style='text-align: center;'>🌊 ReefSight</h1>", unsafe_allow_html=True)
 st.markdown(
-    "<h1 style='text-align:center; color:#004d40;'>An Automatic Coral Health Insights Model Powered by AI</h1>",
+    "<h4 style='text-align:center; color:#004d40;'> Automatic Coral Health Insights Powered by AI</h1>",
     unsafe_allow_html=True
 )
+st.markdown("---")
+st.markdown("<h5 style='text-align:center;'>Use our model to analyze coral health using images, environmental data, or both.", unsafe_allow_html=True)
 
 # Centered image
 img = load_image(img_url)
@@ -221,24 +182,18 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.markdown("---")
-
 # Centered descriptive sentence
 st.markdown(
-    "<p style='text-align:center; font-size:18px;'>Welcome to ReefSight. Above you can see a clear difference between a Healthy and Bleached South Florida Coral Reef. </p>",
-    unsafe_allow_html=True
-)
-st.markdown(
-    "<p style='text-align:center; font-size:18px;'>Use our model to analyze coral health using images, environmental data, or both.Selected an option below based on the type of Data you have.</p>",
+    "<p style='text-align:center; font-size:18px;'>Above you can see a clear difference between a Healthy and Bleached South Florida Coral Reef. </p>",
     unsafe_allow_html=True
 )
 st.markdown("---")
 
 # --- SECTION 1: PREDICTION MODE SELECTION (Centered) ---
-st.markdown("<h2 style='text-align:center;'> Select Your Prediction Method </h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align:center;'> Select Your Data Type </h2>", unsafe_allow_html=True)
 
 # Use columns to center the radio button group
-col_l, col_c, col_r = st.columns([0.37, 0.53, 0.1])
+col_l, col_c, col_r = st.columns([0.435, 0.455, 0.1])
 
 with col_c:
     st.markdown(
@@ -265,14 +220,14 @@ def run_prediction(input_lat, input_lon, input_date, prediction_type, override_f
 
     # --- Internal Mode Handling for Tabular-Only Flow ---
     internal_mode = prediction_type
-    if prediction_type == "Tabular-Only":
+    if prediction_type == "Data":
         if st.session_state.has_manual_data == "Yes (Manual Data Entry)":
             internal_mode = "Tabular-Only (Manual)"
         else:
             internal_mode = "Tabular-Only (NOAA)"
 
     # 1. Validation
-    requires_loc_date = internal_mode not in ("Image-Only (Baseline)")
+    requires_loc_date = internal_mode not in ("Image")
     if requires_loc_date:
         # Note: Lat/Lon/Date are required for Fusion and all Tabular modes
         if input_lat is None or input_lon is None or (abs(input_lat) < 0.001 and abs(input_lon) < 0.001):
@@ -282,7 +237,7 @@ def run_prediction(input_lat, input_lon, input_date, prediction_type, override_f
             st.error("Please provide an Observation Date.")
             return False
 
-    if internal_mode in ("Multi-Modal Fusion (Image + Data)", "Image-Only (Baseline)") and not uploaded_file:
+    if internal_mode in ("Image+Data", "Image") and not uploaded_file:
         st.error("Please upload an image for image-based prediction.")
         return False
 
@@ -326,7 +281,7 @@ def run_prediction(input_lat, input_lon, input_date, prediction_type, override_f
         api_call_kwargs = {"json": tabular_payload}
 
     # Image Modes (Fusion or Image-Only)
-    elif internal_mode in ("Multi-Modal Fusion (Image + Data)", "Image-Only (Baseline)"):
+    elif internal_mode in ("Image+Data", "Image"):
         endpoint = "/predict/image"
 
         if uploaded_file:
@@ -334,7 +289,7 @@ def run_prediction(input_lat, input_lon, input_date, prediction_type, override_f
             files = {"image_file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
 
         data = {}
-        if internal_mode == "Multi-Modal Fusion (Image + Data)":
+        if internal_mode == "Image+Data":
             # Data should contain location/date and overrides if provided
             data = {
                 "Latitude_Degrees": input_lat,
@@ -403,11 +358,11 @@ if st.session_state.mode_chosen_flag:
 
     # Define current mode variables
     current_mode = st.session_state.prediction_type
-    is_tabular_only = current_mode == "Tabular-Only"
+    is_tabular_only = current_mode == "Data"
     # Re-evaluate is_manual_tabular_only based on current state
     is_manual_tabular_only = is_tabular_only and st.session_state.has_manual_data == "Yes (Manual Data Entry)"
-    is_fusion = current_mode == "Multi-Modal Fusion (Image + Data)"
-    is_image_only = current_mode == "Image-Only (Baseline)"
+    is_fusion = current_mode == "Image+Data"
+    is_image_only = current_mode == "Image"
 
     # Define visibility gates for Section 2 components
     show_map = is_fusion or (is_tabular_only and st.session_state.has_manual_data == "No (Pull NOAA Data)")
@@ -424,7 +379,7 @@ if st.session_state.mode_chosen_flag:
     # Tabular Data Source Radio is needed for Tabular-Only and Fusion modes
     show_tabular_source_radio = is_tabular_only or is_fusion
 
-    st.markdown("<h2 style='text-align:center;'>2. Configure Prediction Inputs</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align:center;'>Input your data</h2>", unsafe_allow_html=True)
     st.markdown("---")
 
     if show_map:
@@ -549,7 +504,7 @@ if st.session_state.mode_chosen_flag:
     # --- MAP COLUMN (Left Side) ---
     if show_map and map_col:
         with map_col:
-            st.subheader("Select Location on Map (Required for NOAA Data Pull)")
+            st.subheader("Choose location on map or input coordinates")
             map_center = [
                 st.session_state.selected_location["lat"],
                 st.session_state.selected_location["lon"]
@@ -585,7 +540,7 @@ if st.session_state.mode_chosen_flag:
 
     # --- RESULTS DISPLAY ---
     st.markdown("---")
-    st.markdown("<h2 style='text-align:center;'>Results: Prediction and Analysis</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align:center;'>Results:</h2>", unsafe_allow_html=True)
 
     # Display Loader while thinking
     if st.session_state.is_loading:
@@ -615,9 +570,6 @@ if st.session_state.mode_chosen_flag:
                 "data_source": "NOAA (Mocked)"
             }
 
-        # Bubble Animation
-        show_bubbles(num_bubbles=80, height=300)
-
         # Display Prediction Result Card
         if "prediction" in api_result:
             prediction_data = api_result["prediction"]
@@ -646,7 +598,6 @@ if st.session_state.mode_chosen_flag:
             """, unsafe_allow_html=True)
 
             # Display Image and Metrics in a row
-            st.subheader("Prediction Confidence")
             img_col, metric_col = st.columns([1, 2])
 
             with img_col:
@@ -657,10 +608,7 @@ if st.session_state.mode_chosen_flag:
                     st.info("No image was uploaded for this prediction mode.")
 
             with metric_col:
-                st.metric("Predicted Bleaching Risk", f"{risk:.1f}%", level)
-
                 prob_healthy = probability_unbleached * 100
-                st.markdown("---")
 
                 col_p1, col_p2 = st.columns(2)
 
@@ -680,9 +628,6 @@ if st.session_state.mode_chosen_flag:
                     </div>
                     """, unsafe_allow_html=True)
 
-                st.markdown("---")
-            st.subheader("Input & Metadata")
-
             input_display_data = api_result.get("input_data", {})
 
             # Only show location/date if they were used in the prediction
@@ -691,8 +636,6 @@ if st.session_state.mode_chosen_flag:
                 col_l1.metric("Latitude", f"{input_display_data.get('Latitude_Degrees'):.4f} °")
                 col_l2.metric("Longitude", f"{input_display_data.get('Longitude_Degrees'):.4f} °")
                 col_l3.metric("Observation Date", f"{input_display_data.get('Date_Year')}-{input_display_data.get('Date_Month')}")
-
-            st.markdown("##### Environmental Data Used (Tabular Features)")
 
             tabular_features = api_result.get("tabular_features", {})
 
@@ -729,17 +672,18 @@ if st.session_state.mode_chosen_flag:
             # Random Fact
             fact = get_random_fact()
             st.info(f"Did you know: {fact}")
-            st.markdown("---")
-            
+
 # --- FOOTER ---
 st.markdown("---")
 colL, colM, colR = st.columns([1,8,1])
 with colM:
-    st.markdown("### Privacy and Data Security Policy")
-    st.warning("NO DATA RETENTION POLICY")
+    st.markdown("<h3 style='text-align: center;'>Privacy and Data Policy</h1>", unsafe_allow_html=True)
     st.markdown("""
-* All inputs (images, coordinates, environmental data) are used only for the immediate prediction request.
-* Predictions are generated by machine learning models using submitted data and may contain inaccuracies.
-* No data is stored or logged.
-* All processing occurs in-memory and is wiped after generating the prediction.
-""")
+    <div style="background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; border-radius: 0.25rem; padding: 10px; text-align: center; margin: 10px 0;">
+        <strong>NO DATA RETENTION POLICY</strong>
+    </div>
+""", unsafe_allow_html=True)
+    st.markdown("<h5 style='text-align: center;'>* All inputs (images, coordinates, environmental data) are used only for the immediate prediction request.</h5>", unsafe_allow_html=True)
+    st.markdown("<h5 style='text-align: center;'>* Predictions are generated by machine learning models using submitted data and may contain inaccuracies.</h5>", unsafe_allow_html=True)
+    st.markdown("<h5 style='text-align: center;'>* No data is stored or logged.</h5>", unsafe_allow_html=True)
+    st.markdown("<h5 style='text-align: center;'>* All processing occurs in-memory and is wiped after generating the prediction.</h5>", unsafe_allow_html=True)
