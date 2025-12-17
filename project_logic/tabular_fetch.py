@@ -12,8 +12,7 @@ from io import StringIO
 import math
 import xarray as xr
 from pyproj import Geod
-import os
-
+from pathlib import Path
 
 
 @lru_cache(maxsize=256)
@@ -576,7 +575,11 @@ def build_X_pred(lat, lon, dt):
     ## i = intermediate
     ## h = high
     ## f = full
-    coast = gpd.read_file(os.path.join(os.path.expanduser('~'), "code", "Lucia-Cordero", "08-ReefSight", "project_logic", "gshhg-shp-2.3.7", "GSHHS_h_L1.shp"))
+
+    BASE_DIR = Path(__file__).resolve().parent
+    coast_path = BASE_DIR / "gshhg-shp-2.3.7" / "GSHHS_h_L1.shp"
+
+    coast = gpd.read_file(coast_path)
     coast = coast.to_crs("EPSG:4326")
 
 
