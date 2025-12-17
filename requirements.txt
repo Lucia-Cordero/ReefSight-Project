@@ -30,6 +30,9 @@ dill
 opencv-python
 Pillow
 pydantic
+geopandas
+pydap
+xarray
 
 
 # Trick to install the version of Tensorflow depending on your processor: darwin == Mac, ARM == M1

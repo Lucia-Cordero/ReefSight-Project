@@ -75,16 +75,18 @@ def predict_tabular(model=None, X_pred: pd.DataFrame = None):
     X_pred_preprocessed = preprocess_tabular (X_pred)
 
     #Predict using loaded model's .predict function
-    pred = model.predict(X_pred_preprocessed)
+    y_pred = model.predict(X_pred_preprocessed)
+    y_proba = model.predict_proba(X_pred_preprocessed)[0]
+
 
     #Report classes & probabilities
-    class_names = ['Bleached', 'Healthy']
+    class_names = ['Healthy', 'Bleached']
 
-    prob_healthy = float(pred)
-    prob_bleached = 1 - prob_healthy
-
-    predicted_label = 1 if pred > 0.5 else 0
+    predicted_label = int(y_pred[0])
     predicted_class = class_names[predicted_label]
+
+    prob_healthy = float(y_proba[0])
+    prob_bleached = float(y_proba[1])
 
     print('✅ Tabular prediction ready')
 
