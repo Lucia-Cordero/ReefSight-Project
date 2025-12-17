@@ -382,18 +382,7 @@ if st.session_state.mode_chosen_flag:
     st.markdown("<h2 style='text-align:center;'>Input your data</h2>", unsafe_allow_html=True)
     st.markdown("---")
 
-    if show_map:
-        map_col, input_col = st.columns([3, 2])
-    else:
-        map_col = None
-        input_col = st.container()
-
-    with input_col:
-
-        current_override_features = {}
-        current_uploaded_file = st.session_state.uploaded_file
-
-        if show_tabular_source_radio:
+    if show_tabular_source_radio:
             st.markdown(f"### Data Source Selection")
             st.session_state.has_manual_data = st.radio(
                 "Do you have your own environmental data?",
@@ -405,6 +394,17 @@ if st.session_state.mode_chosen_flag:
             is_manual_tabular_only = st.session_state.has_manual_data == "Yes (Manual Data Entry)"
             show_manual_override = is_manual_tabular_only or is_fusion
             st.markdown("---")
+
+    if show_map:
+        map_col, input_col = st.columns([3, 2])
+    else:
+        map_col = None
+        input_col = st.container()
+
+    with input_col:
+
+        current_override_features = {}
+        current_uploaded_file = st.session_state.uploaded_file
 
         with st.form("prediction_input_form", clear_on_submit=False):
 
@@ -500,6 +500,7 @@ if st.session_state.mode_chosen_flag:
                 override_features=current_override_features,
                 uploaded_file=st.session_state.uploaded_file
             )
+
 
     # --- MAP COLUMN (Left Side) ---
     if show_map and map_col:
