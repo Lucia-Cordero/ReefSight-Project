@@ -101,7 +101,6 @@ def show_bubbles(num_bubbles: int, height: int):
             animation-duration: {duration}s;
         "></div>
         """
-
     html_content += bubble_divs
     html_content += "</div>"
 
@@ -110,7 +109,6 @@ def show_bubbles(num_bubbles: int, height: int):
 
 # --- OCTOPUS LOADER ---
 def show_octopus_loader():
-    """Renders the custom octopus loading animation."""
     st.markdown("""
 <div style="width:100%; height:60px; overflow:hidden; position:relative; background:transparent;">
     <div class="octopus" style="font-size:50px; position:absolute; left:-60px;">🐙</div>
@@ -205,7 +203,7 @@ if "mode_chosen_flag" not in st.session_state:
     st.session_state.mode_chosen_flag = False
 
 # --- HEADER ---
-st.markdown("<h1 style='text-align: center;'>M🌊 ReefSight</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center;'>🌊 ReefSight</h1>", unsafe_allow_html=True)
 st.markdown(
     "<h1 style='text-align:center; color:#004d40;'>An Automatic Coral Health Insights Model Powered by AI</h1>",
     unsafe_allow_html=True
@@ -222,6 +220,8 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
+st.markdown("---")
 
 # Centered descriptive sentence
 st.markdown(
@@ -260,7 +260,6 @@ st.markdown("</div>", unsafe_allow_html=True)
 if "run_prediction_flag" not in st.session_state:
     st.session_state.run_prediction_flag = False
 
-
 # --- PREDICTION LOGIC FUNCTION ---
 def run_prediction(input_lat, input_lon, input_date, prediction_type, override_features, uploaded_file):
 
@@ -273,7 +272,6 @@ def run_prediction(input_lat, input_lon, input_date, prediction_type, override_f
             internal_mode = "Tabular-Only (NOAA)"
 
     # 1. Validation
-
     requires_loc_date = internal_mode not in ("Image-Only (Baseline)")
     if requires_loc_date:
         # Note: Lat/Lon/Date are required for Fusion and all Tabular modes
@@ -331,8 +329,9 @@ def run_prediction(input_lat, input_lon, input_date, prediction_type, override_f
     elif internal_mode in ("Multi-Modal Fusion (Image + Data)", "Image-Only (Baseline)"):
         endpoint = "/predict/image"
 
-        uploaded_file.seek(0)
-        files = {"image_file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
+        if uploaded_file:
+            uploaded_file.seek(0)
+            files = {"image_file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
 
         data = {}
         if internal_mode == "Multi-Modal Fusion (Image + Data)":
@@ -445,8 +444,8 @@ if st.session_state.mode_chosen_flag:
                 "Do you have your own environmental data?",
                 ("No (Pull NOAA Data)", "Yes (Manual Data Entry)"),
                 index=0 if st.session_state.has_manual_data == "No (Pull NOAA Data)" else 1,
-            key="manual_data_radio"
-        )
+                key="manual_data_radio"
+            )
             st.info("⚠️ Note: Fetching and processing external NOAA data may take up to 10 minutes!")
             is_manual_tabular_only = st.session_state.has_manual_data == "Yes (Manual Data Entry)"
             show_manual_override = is_manual_tabular_only or is_fusion
@@ -530,7 +529,6 @@ if st.session_state.mode_chosen_flag:
                 type="primary",
                 help="Run bleaching prediction now!"
             )
-
 # Trigger loader and flag to run prediction on next rerun
             if submitted:
                 st.session_state.is_loading = True
@@ -546,8 +544,7 @@ if st.session_state.mode_chosen_flag:
                 prediction_type=st.session_state.prediction_type,
                 override_features=current_override_features,
                 uploaded_file=st.session_state.uploaded_file
-    )
-
+            )
 
     # --- MAP COLUMN (Left Side) ---
     if show_map and map_col:
@@ -595,7 +592,6 @@ if st.session_state.mode_chosen_flag:
         show_octopus_loader()
 
     if st.session_state.show_results and st.session_state.api_result:
-
         api_result = st.session_state.api_result
 
         # Default API result data structure for display if actual API is not called
@@ -685,7 +681,6 @@ if st.session_state.mode_chosen_flag:
                     """, unsafe_allow_html=True)
 
                 st.markdown("---")
-
             st.subheader("Input & Metadata")
 
             input_display_data = api_result.get("input_data", {})
@@ -735,11 +730,7 @@ if st.session_state.mode_chosen_flag:
             fact = get_random_fact()
             st.info(f"Did you know: {fact}")
             st.markdown("---")
-            st.subheader("Prediction Details (Raw API Response)")
-            st.json(api_result)
-
-            st.markdown("---")
-
+            
 # --- FOOTER ---
 st.markdown("---")
 colL, colM, colR = st.columns([1,8,1])
