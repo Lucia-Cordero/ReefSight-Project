@@ -107,52 +107,71 @@ def train() -> None:
 
 
 
-def predict(X_pred: pd.DataFrame = None) -> np.ndarray:
+def predict(lat, lon, dt, X_pred: pd.DataFrame = None) -> np.ndarray:
 
     print("\n Use case: predicting coral bleaching risk")
 
     from preprocessing import load_preproc
     from modeling import load_model
+    from predicting import erddap_extract, fetch_sst_range, compute_weekly_clim_max, fetch_environmental_variables, fetch_air_temperature_k, haversine, distance_to_shore, depth_from_opentopo, infer_region, _endpoint, _fetch_direction, _compute_fetch, _classify, classify_exposure, cyclone_frequency, turbidity, windspeed
+    from functools import lru_cache
+    import numpy as np
+    import pandas as pd
+    import requests
+    import geopandas as gpd
+    from shapely.geometry import LineString, Point
+    from shapely.ops import nearest_points
+    from datetime import datetime, timedelta
+    #from math import radians, sin, cos, asin, sqrt, atan2
+    from functools import lru_cache
+    from io import StringIO
+    import math
+    import xarray as xr
+    from pyproj import Geod
 
-    #if X_pred is None:
-    #    X_pred = pd.Dataframe(dict(
-    #        Latitude_Degrees=[],
-    #        Longitude_Degrees=[],
-    #        Date_Year=[],
-    #        Date_Month=[],
-    #        Distance_to_Shore=[],
-    #        Turbidity=[],
-    #        Cyclone_Frequency=[],
-    #        Depth_m=[],
-    #        ClimSST=[],
-    #        Temperature_Kelvin=[],
-    #        Windspeed=[],
-    #        SSTA=[],
-    #        SSTA_DHW=[],
-    #        TSA=[],
-    #        TSA_DHW=[],
-    #        Exposure=[]
-    #    ))
+    coast = gpd.read_file("/home/nico_kas/code/Lucia-Cordero/ReefSight-Project/tabular/gshhg-shp-2.3.7/GSHHS_h_L1.shp")
+    coast = coast.to_crs("EPSG:4326")
 
-    # ensure order of user input is the same as feature order for preprocessor training!
-    X_pred = pd.DataFrame(dict(
-            Latitude_Degrees= [-11.22],
-            Longitude_Degrees= [132.23],
-            Date_Year= [2003],
-            Date_Month= [1],
-            Distance_to_Shore= [339.66],
-            Turbidity= [0.1633],
-            Cyclone_Frequency= [32.23],
-            Depth_m= [2.75],
-            ClimSST= [262.15],
-            Temperature_Kelvin= [303.98],
-            Windspeed= [5],
-            SSTA= [1.1],
-            SSTA_DHW= [12.33],
-            TSA= [0.56],
-            TSA_DHW= [10.59],
-            Exposure= ["Sheltered"]
-            ))
+    print("\n Fetching data....")
+    env = fetch_environmental_variables(lat, lon, dt)
+    print("\n ... temperature anomalies: done.")
+    air_k = fetch_air_temperature_k(lat, lon, dt)
+    print("\n ... air temperature: done.")
+    dist = distance_to_shore(lat, lon, coast)
+    print("\n ... distance to coast line: done.")
+    depth = depth_from_opentopo(lat, lon)
+    print("\n ... sea depth of coral reef: done.")
+    exp = classify_exposure(lat, lon, coast)
+    print("\n ... coral reef exposure: done.")
+    turb = turbidity(lat, lon, dt)
+    print("\n ... sea turbidity: done.")
+    cyc = cyclone_frequency(lat, lon)
+    print("\n ... cyclone occurences: done.")
+    wind = windspeed(lat, lon, dt)
+    print("\n ... windspeed: done.")
+    print("\n All environmental data fetched!")
+
+
+    if X_pred is None:
+        X_pred = pd.DataFrame(dict(
+            Latitude_Degrees=[lat],
+            Longitude_Degrees=[lon],
+            Date_Year=[dt.year],
+            Date_Month=[dt.month],
+            Distance_to_Shore=[dist],
+            Turbidity=[turb],
+            Cyclone_Frequency=[cyc],
+            Depth_m=[depth],
+            Exposure=[exp],
+            ClimSST=[env["ClimSST"]],
+            Temperature_Kelvin=[air_k],
+            Windspeed=[wind],
+            SSTA=[env["SSTA"]],
+            SSTA_DHW=[env["SSTA_DHW"]],
+            TSA=[env["TSA"]],
+            TSA_DHW=[env["TSA_DHW"]]
+       ))
+
 
     preproc = load_preproc()
     #pass name of clf?
