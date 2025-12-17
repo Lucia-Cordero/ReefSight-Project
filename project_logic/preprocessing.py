@@ -1,32 +1,14 @@
 import numpy as np
 import pandas as pd
 import dill
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from tensorflow.keras.preprocessing.image import img_to_array
 from PIL import Image
+from datetime import date
 import io
 import os
 
 
-
-
-class TabularInput(BaseModel):
-    Latitude_Degrees: float
-    Longitude_Degrees: float
-    Date_Year: float
-    Date_Month: float
-    Distance_to_Shore: float
-    Turbidity: float
-    Cyclone_Frequency: float
-    Depth_m: float
-    ClimSST: float
-    Temperature_Kelvin: float
-    Windspeed: float
-    SSTA: float
-    SSTA_DHW: float
-    TSA: float
-    TSA_DHW: float
-    Exposure: str
 
 
 
@@ -75,3 +57,31 @@ def preprocess_tabular(X: pd.DataFrame = None):
     X_preprocessed = preprocessor.transform(X)
 
     return X_preprocessed
+
+# -----------------------------------------------------------------------
+#                           TABULAR: INPUT SCHEMAS
+# -----------------------------------------------------------------------
+
+
+class FullTabularInput(BaseModel):
+    Latitude_Degrees: float
+    Longitude_Degrees: float
+    Date_Year: float
+    Date_Month: float
+    Distance_to_Shore: float
+    Turbidity: float
+    Cyclone_Frequency: float
+    Depth_m: float
+    ClimSST: float
+    Temperature_Kelvin: float
+    Windspeed: float
+    SSTA: float
+    SSTA_DHW: float
+    TSA: float
+    TSA_DHW: float
+    Exposure: str
+
+class MinimalTabularInput(BaseModel):
+    latitude: float = Field(..., description="Latitude in degrees")
+    longitude: float = Field(..., description="Longitude in degrees")
+    observation_date: date = Field(..., description="Date (YYYY-MM-DD)")
