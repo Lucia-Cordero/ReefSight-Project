@@ -731,4 +731,3 @@ with colM:
 * No data is stored or logged.
 * All processing occurs in-memory and is wiped after generating the prediction.
 """)
-
