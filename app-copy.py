@@ -205,10 +205,12 @@ if "mode_chosen_flag" not in st.session_state:
     st.session_state.mode_chosen_flag = False
 
 # --- HEADER ---
+st.markdown("<h1 style='text-align: center;'>M🌊 ReefSight</h1>", unsafe_allow_html=True)
 st.markdown(
-    "<h1 style='text-align:center; color:#004d40;'>🌊 ReefSight: Multi-Modal Coral Bleaching Prediction</h1>",
+    "<h1 style='text-align:center; color:#004d40;'>An Automatic Coral Health Insights Model Powered by AI</h1>",
     unsafe_allow_html=True
 )
+
 # Centered image
 img = load_image(img_url)
 st.markdown(
@@ -223,10 +225,13 @@ st.markdown(
 
 # Centered descriptive sentence
 st.markdown(
-    "<p style='text-align:center; font-size:18px;'>Welcome to ReefSight. Above you can see a clear difference between a Healthy and Bleached South Florida Coral Reef. Use our model to analyze coral health using images, environmental data, or both.</p>",
+    "<p style='text-align:center; font-size:18px;'>Welcome to ReefSight. Above you can see a clear difference between a Healthy and Bleached South Florida Coral Reef. </p>",
     unsafe_allow_html=True
 )
-
+st.markdown(
+    "<p style='text-align:center; font-size:18px;'>Use our model to analyze coral health using images, environmental data, or both.Selected an option below based on the type of Data you have.</p>",
+    unsafe_allow_html=True
+)
 st.markdown("---")
 
 # --- SECTION 1: PREDICTION MODE SELECTION (Centered) ---
@@ -547,7 +552,7 @@ if st.session_state.mode_chosen_flag:
     # --- MAP COLUMN (Left Side) ---
     if show_map and map_col:
         with map_col:
-            st.subheader("2a. Select Location on Map (Required for NOAA Data Pull)")
+            st.subheader("Select Location on Map (Required for NOAA Data Pull)")
             map_center = [
                 st.session_state.selected_location["lat"],
                 st.session_state.selected_location["lon"]
@@ -632,7 +637,7 @@ if st.session_state.mode_chosen_flag:
                 color = "#f44336" # Red
                 icon = "🔥"
             else:
-                final_classification = "Unbleached/Healthy"
+                final_classification = "Healthy"
                 color = "#4CAF50" # Green
                 icon = "✅"
 
@@ -666,7 +671,7 @@ if st.session_state.mode_chosen_flag:
                 with col_p1:
                     st.markdown(f"""
                     <div style="background-color: #e8f5e9; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #4CAF50;">
-                        <p style="margin: 0; font-size: 14px; color: #388e3c; font-weight: bold;">Probability Healthy/Unbleached</p>
+                        <p style="margin: 0; font-size: 14px; color: #388e3c; font-weight: bold;">Probability Healthy</p>
                         <h3 style="margin: 5px 0 0; color: #1b5e20;">{prob_healthy:.2f}%</h3>
                     </div>
                     """, unsafe_allow_html=True)
