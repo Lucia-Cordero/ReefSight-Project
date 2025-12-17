@@ -252,6 +252,10 @@ with col_c:
 
 st.markdown("</div>", unsafe_allow_html=True)
 
+if "run_prediction_flag" not in st.session_state:
+    st.session_state.run_prediction_flag = False
+
+
 # --- PREDICTION LOGIC FUNCTION ---
 def run_prediction(input_lat, input_lon, input_date, prediction_type, override_features, uploaded_file):
 
@@ -527,6 +531,18 @@ if st.session_state.mode_chosen_flag:
                 st.session_state.is_loading = True
                 st.session_state.run_prediction_flag = True
 
+        if st.session_state.run_prediction_flag:
+            st.session_state.run_prediction_flag = False  # reset immediately
+
+            run_prediction(
+                input_lat=st.session_state.input_lat,
+                input_lon=st.session_state.input_lon,
+                input_date=st.session_state.input_date,
+                prediction_type=st.session_state.prediction_type,
+                override_features=current_override_features,
+                uploaded_file=st.session_state.uploaded_file
+    )
+
 
     # --- MAP COLUMN (Left Side) ---
     if show_map and map_col:
@@ -577,7 +593,7 @@ if st.session_state.mode_chosen_flag:
 
         api_result = st.session_state.api_result
 
-        # Mock API result data structure for display if actual API is not called
+        # Default API result data structure for display if actual API is not called
         if not api_result.get("prediction"):
             api_result = {
                 "prediction": {
@@ -731,4 +747,3 @@ with colM:
 * No data is stored or logged.
 * All processing occurs in-memory and is wiped after generating the prediction.
 """)
-

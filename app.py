@@ -19,7 +19,7 @@ def img_to_bytes(img: Image.Image) -> str:
     return base64.b64encode(buffered.getvalue()).decode()
 
 # --- CONFIGURATION ---
-API_URL = "https://reef-sight-api-98532754363.europe-west1.run.app"
+API_URL = "https://reefsight-api-98532754363.europe-west1.run.app"
 NOAA_DATA_SOURCE_URL = "https://coralreefwatch.noaa.gov/product/5km/index.php#data_access"
 
 # --- CORAL_FACTS ---
