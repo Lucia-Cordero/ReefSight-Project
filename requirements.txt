@@ -23,9 +23,6 @@ uvicorn
 python-multipart
 altair
 
-#Frontend
-streamlit
-streamlit_folium
 
 #Project_logic
 split-folders==0.5.1

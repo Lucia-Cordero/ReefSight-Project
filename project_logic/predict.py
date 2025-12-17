@@ -15,9 +15,9 @@ from project_logic.preprocessing import preprocess_tabular
 # -----------------------------------------------------------------------
 
 def load_image_model_trained():
-    model_path = os.path.join("models", "baseline_image_model.keras")
+    model_path = os.path.join("models", "VGG16_image_model.keras")
     image_model = load_model(model_path)
-    print('✅ Image_Model_loaded')
+    print('✅ Image_Model_VGG16_loaded')
     return image_model
 
 
@@ -36,7 +36,7 @@ def load_tabular_model_trained():
 
 def predict_image(model=None, image_bytes=None):
     """
-    Make a bleaching prediction using the latest baseline CNN model
+    Make a bleaching prediction using the VGG16 model
     """
     #Load image with 'load_img' function
     preprocessed_image = load_img(image_bytes)
@@ -45,10 +45,10 @@ def predict_image(model=None, image_bytes=None):
     pred = model.predict(preprocessed_image)[0][0]
 
     #Report classes & probabilities
-    class_names = ['Bleached', 'Unbleached']
+    class_names = ['Bleached', 'Healthy']
 
-    prob_unbleached = float(pred)
-    prob_bleached = 1 - prob_unbleached
+    prob_healthy = float(pred)
+    prob_bleached = 1 - prob_healthy
 
     predicted_label = 1 if pred > 0.5 else 0
     predicted_class = class_names[predicted_label]
@@ -58,7 +58,7 @@ def predict_image(model=None, image_bytes=None):
     return {
         "predicted_class": predicted_class,
         "probability_bleached": prob_bleached,
-        "probability_unbleached": prob_unbleached
+        "probability_healthy": prob_healthy
     }
 
 
@@ -68,7 +68,7 @@ def predict_image(model=None, image_bytes=None):
 
 def predict_tabular(model=None, X_pred: pd.DataFrame = None):
     """
-    Make a bleaching prediction using the latest trained tabular model
+    Make a bleaching prediction using the RandomFores model
     """
 
     #Preprocess X_pred using preprocess_tabular function
@@ -78,19 +78,18 @@ def predict_tabular(model=None, X_pred: pd.DataFrame = None):
     pred = model.predict(X_pred_preprocessed)
 
     #Report classes & probabilities
-    class_names = ['Bleached', 'Unbleached']
+    class_names = ['Bleached', 'Healthy']
 
-    prob_unbleached = float(pred)
-    prob_bleached = 1 - prob_unbleached
+    prob_healthy = float(pred)
+    prob_bleached = 1 - prob_healthy
 
     predicted_label = 1 if pred > 0.5 else 0
     predicted_class = class_names[predicted_label]
-
 
     print('✅ Tabular prediction ready')
 
     return {
         "predicted_class": predicted_class,
         "probability_bleached": prob_bleached,
-        "probability_unbleached": prob_unbleached
+        "probability_healthy": prob_healthy
     }
