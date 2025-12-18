@@ -651,7 +651,7 @@ if st.session_state.mode_chosen_flag:
                     st.markdown(f"""
                     <div style="background-color: #e8f5e9; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #4CAF50;">
                         <p style="margin: 0; font-size: 14px; color: #388e3c; font-weight: bold;">Probability Healthy</p>
-                        <h3 style="margin: 5px 0 0; color: #1b5e20;">{prob_healthy:.2f}%</h3>
+                        <h3 style="margin: 5px 0 0; color: #1b5e20;">{prob_healthy:.3f}%</h3>
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -659,7 +659,7 @@ if st.session_state.mode_chosen_flag:
                     st.markdown(f"""
                     <div style="background-color: #ffebee; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #f44336;">
                         <p style="margin: 0; font-size: 14px; color: #d32f2f; font-weight: bold;">Probability Bleached</p>
-                        <h3 style="margin: 5px 0 0; color: #b71c1c;">{risk:.2f}%</h3>
+                        <h3 style="margin: 5px 0 0; color: #b71c1c;">{risk:.3f}%</h3>
                     </div>
                     """, unsafe_allow_html=True)
 
