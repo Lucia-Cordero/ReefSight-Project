@@ -20,7 +20,8 @@ def img_to_bytes(img: Image.Image) -> str:
     return base64.b64encode(buffered.getvalue()).decode()
 
 # --- CONFIGURATION ---
-API_URL = "https://reefsight-api-2-98532754363.europe-west1.run.app/"
+#API_URL = "https://reefsight-api-2-98532754363.europe-west1.run.app/"
+API_URL="https://reefsight-api-2-98532754363.europe-west1.run.app"
 NOAA_DATA_SOURCE_URL = "https://coralreefwatch.noaa.gov/product/5km/index.php#data_access"
 img_url = "https://image2url.com/images/1765895634547-53b1795e-520b-477f-9fd4-7aa744291e4c.jpg"
 
@@ -268,15 +269,21 @@ def run_prediction(input_lat, input_lon, input_date, prediction_type, override_f
         endpoint = "/predict/tabular"
 
         # Prepare the request body for the /predict/tabular endpoint
-        tabular_payload = {
-            "Latitude_Degrees": input_lat,
-            "Longitude_Degrees": input_lon,
-            "Date_Year": input_year,
-            "Date_Month": input_month,
-        }
+        if internal_mode == "Tabular-Only (NOAA)":
+            tabular_payload = {
+                "latitude": input_lat,
+                "longitude": input_lon,
+                "observation_date": input_date.isoformat()
+            }
 
-        if internal_mode == "Tabular-Only (Manual)":
-             tabular_payload.update(override_features)
+        elif internal_mode == "Tabular-Only (Manual)":
+            tabular_payload = {
+                "Latitude_Degrees": input_lat,
+                "Longitude_Degrees": input_lon,
+                "Date_Year": input_year,
+                "Date_Month": input_month,
+            }
+        tabular_payload.update(override_features)
 
         api_call_kwargs = {"json": tabular_payload}
 
@@ -313,32 +320,57 @@ def run_prediction(input_lat, input_lon, input_date, prediction_type, override_f
     try:
         full_url = f"{API_URL}{endpoint}"
 
-        # Check if we are sending data as JSON or Multipart
-        if "json" in api_call_kwargs:
-            response = requests.post(full_url, timeout=30, json=api_call_kwargs["json"])
-        else:
-            response = requests.post(full_url, timeout=30, files=api_call_kwargs.get("files"), data=api_call_kwargs.get("data"))
+        request_kwargs = {
+            "timeout": 600,
+        }
 
-        # Store raw response text for diagnostic purposes
+        if "json" in api_call_kwargs:
+            request_kwargs["json"] = api_call_kwargs["json"]
+        else:
+            request_kwargs["files"] = api_call_kwargs.get("files")
+            request_kwargs["data"] = api_call_kwargs.get("data")
+
+        response = requests.post(full_url, **request_kwargs)
+
+        print("Status code:", response.status_code)
+        print("Response text:", response.text)
+
+        try:
+            print("Response JSON:", response.json())
+        except Exception:
+            pass
+
+        # Raise HTTP errors first
+        response.raise_for_status()
+
+        # Parse JSON
         try:
             api_result = response.json()
             st.session_state.raw_api_response = api_result
         except json.JSONDecodeError:
             st.session_state.is_loading = False
             st.error("API response was not valid JSON.")
-            st.exception(f"Raw response text: {response.text}")
+            st.exception(response.text)
             return False
-
-        response.raise_for_status() # Raise HTTPError for bad status codes (4xx or 5xx)
 
     except requests.exceptions.HTTPError as e:
         st.session_state.is_loading = False
-        # Attempt to extract API error detail if possible
-        error_detail = st.session_state.raw_api_response.get("detail", "Unknown API error or status code.")
-        st.error(f"Prediction API Error ({response.status_code}): {error_detail}")
+
+        error_detail = None
+        if e.response is not None:
+            try:
+                error_detail = e.response.json().get("detail")
+            except Exception:
+                error_detail = e.response.text
+
+            st.error(f"Prediction API Error ({e.response.status_code}): {error_detail}")
+        else:
+            st.error("Prediction API Error: No response received.")
+
         st.exception(e)
         return False
-    except Exception as e:
+
+    except requests.exceptions.RequestException as e:
         st.session_state.is_loading = False
         st.error(f"Prediction API request failed. Check the endpoint URL: {full_url}.")
         st.exception(e)
@@ -365,7 +397,9 @@ if st.session_state.mode_chosen_flag:
     is_image_only = current_mode == "Image"
 
     # Define visibility gates for Section 2 components
-    show_map = is_fusion or (is_tabular_only and st.session_state.has_manual_data == "No (Pull NOAA Data)")
+    #show_map = is_fusion or (is_tabular_only and st.session_state.has_manual_data == "No (Pull NOAA Data)")
+    show_map = is_fusion or is_tabular_only
+
 
     # Required Inputs (Lat/Lon/Date) are needed for all non-Image-Only modes.
     show_required_inputs = not is_image_only
@@ -555,7 +589,7 @@ if st.session_state.mode_chosen_flag:
             api_result = {
                 "prediction": {
                     "probability_bleached": 0.35,
-                    "probability_unbleached": 0.65
+                    "probability_healthy": 0.65
                 },
                 "input_data": {
                     "Latitude_Degrees": st.session_state.input_lat,
@@ -577,7 +611,7 @@ if st.session_state.mode_chosen_flag:
 
             # --- Robust Classification Logic using Probability ---
             probability_bleached = prediction_data.get("probability_bleached", 0.0)
-            probability_unbleached = prediction_data.get("probability_unbleached", 0.0)
+            probability_unbleached = prediction_data.get("probability_healthy", 0.0)
 
             risk = probability_bleached * 100
 
