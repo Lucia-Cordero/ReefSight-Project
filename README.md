@@ -24,30 +24,29 @@
 ## 📊 Data used
 
 ### Image Classifier
-|**Source** | Kaggle Dataset: Bleached Corals Detection |
 
-| **URL** | [https://www.kaggle.com/datasets/sonainjamil/bleached-corals-detection]|
+| **Source** | Manually curated dataset derived from Kaggle Dataset: 'Bleached Corals Detection'
 
-| **Classes** | 2 (Bleached, Unbleached) |
+| **URL** | [https://www.kaggle.com/datasets/sonainjamil/bleached-corals-detection]
 
-| **Format** | JPG images |
+| **Classes** | 2 (Bleached, Unbleached)
 
-| **Preprocessing** | Images are resized to **224x224** pixels and rescaled to $[0, 1]$ before model input. |
+| **Format** | JPG images
 
-| **Splitting Ratio**| Data is automatically split into **80% Training, 10% Validation, 10% Testing** sets. |
+
 
 
 ### Tabular Classifier
 
-|**Source** | Dataset: Bleaching and environmental data for global coral reef sites from 1980-2020|
+| **Source** | Dataset: Bleaching and environmental data for global coral reef sites from 1980-2020
 
-| **URL** | [https://www.bco-dmo.org/dataset/773466]|
+| **URL** | [https://www.bco-dmo.org/dataset/773466]
 
-| **Classes** | # (name 1, name2) |
+| **Classes** | # (name 1, name2)
 
-| **Format** | CSV file containing metrics like temperature, sea level, and bleaching percentages|
+| **Format** | CSV file containing metrics like temperature, sea level, and bleaching percentages
 
-| **Processing** | Structured dataset used to train a separate dense network to predict bleaching risk based on factors such as location, time, and environment.|
+
 
 
 
