@@ -1,5 +1,10 @@
-# Project Name
-**ReefSight Project**
+<div align="center">
+  <img src="assets/banner.gif" alt="ReefSight Scanning Banner" width="100%">
+</div>
+
+<br />
+
+# ReefSight
 
 **Description**
 This project, ReefSight, develops a Multi-Modal Deep Learning solution to predict coral bleaching risk and to classify images as 'Bleached' or 'Unbleached'. We combine image classification (VGG16) with structured environmental data (tabular analysis) to create a robust, site-specific prediction tool.
