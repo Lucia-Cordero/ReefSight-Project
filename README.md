@@ -14,7 +14,6 @@
 
 Coral reefs support up to 25% of all marine species and are vital for biodiversity, fisheries, and coastal protection. However, rising ocean temperatures and other stressors are causing more frequent and severe coral bleaching events. Traditional monitoring methods can be resource-intensive and limited in scale. ReefSight seeks to automate coral health predictions using AI, enabling faster insights for researchers and conservationists
 
-
 ---
 
 ## 🧠 What ReefSight Does
@@ -44,6 +43,9 @@ ReefSight relies on **publicly available datasets** for both image-based and env
 
 **Description**:
 This dataset contains labeled underwater images of coral reefs categorized as *bleached* and *non-bleached*. It is used to train and evaluate convolutional neural networks for visual coral health classification.
+
+**Disclaimer**:
+The original Kaggle dataset was curated by removing non-coral imagery and augmented with Internet-sourced images of healthy and bleached corals.
 
 **Usage in ReefSight**:
 
@@ -276,7 +278,12 @@ Results indicate that **temperature‑related variables and variability metrics*
 
 ---
 
-## 🚀 Running the Project Locally
+## 🚀 Running the Backend Locally
+
+This repository contains the **backend inference API and machine-learning logic** for ReefSight.
+The interactive frontend application is maintained in a **separate repository**:
+
+👉 [https://github.com/Lucia-Cordero/ReefSight_front](https://github.com/Lucia-Cordero/ReefSight_front)
 
 ### 1. Install Dependencies
 
@@ -284,17 +291,25 @@ Results indicate that **temperature‑related variables and variability metrics*
 pip install -r requirements.txt
 ```
 
-### 2. Run API Locally
+### 2. Run the FastAPI Server
 
 ```bash
 uvicorn api.fast:app --reload
 ```
 
-### 3. Run Streamlit App
+Once running, the API will be available at:
 
-```bash
-streamlit run app.py
 ```
+http://localhost:8000
+```
+
+### 3. Test the API
+
+You can interact with the backend using:
+
+* FastAPI Swagger UI (`/docs`)
+* API clients such as `curl` or Postman
+* The ReefSight frontend application (separate repository)
 
 ---
 
