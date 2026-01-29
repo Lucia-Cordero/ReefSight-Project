@@ -12,20 +12,18 @@
 
 **🚀 Key Features**
 
-|**Image-based Classification**|: Automated download, formatting, and splitting of raw image data; implementation of Baseline CNN and VGG16 Transfer Learning.
+**Image-based Classification**: Automated download, formatting, and splitting of raw image data; implementation of Baseline CNN and VGG16 Transfer Learning.
 
-|**Tabular Data-based Classification**|: Use of structured data from the Global Coral Reef Monitoring Network (GCRMN) dataset to identify environmental risk factors.
+**Tabular Data-based Classification**: Use of structured data from the Global Coral Reef Monitoring Network (GCRMN) dataset to identify environmental risk factors.
 
-|**Performance Comparison**|: Direct comparison between image-only, tabular-only, and the final Multi-Modal Fusion Model to determine the optimal solution. develops deep learning models to automatically classify coral images as either 'Bleached' or 'Unbleached'. By leveraging computer vision and transfer learning, we aim to provide a reliable, scalable, and non-invasive tool for monitoring coral reef health, accelerating conservation efforts.
-
-|**Multi-Modal Data Integration**|: Combines coral imagery and structured environmental data to improve prediction accuracy.
+**Multi-Modal Data Integration**: Combines coral imagery and structured environmental data to improve prediction accuracy.
 
 
 ## 📊 Data used
 
 ### Image Classifier
 
-| **Source** | Manually curated dataset derived from Kaggle Dataset: 'Bleached Corals Detection'
+| **Source** | Manually curated dataset derived from Kaggle Dataset: "Bleached Corals Detection"
 
 | **URL** | [https://www.kaggle.com/datasets/sonainjamil/bleached-corals-detection]
 
@@ -38,13 +36,13 @@
 
 ### Tabular Classifier
 
-| **Source** | Dataset: Bleaching and environmental data for global coral reef sites from 1980-2020
+| **Source** | Dataset: "Bleaching and environmental data for global coral reef sites from 1980-2020"
 
 | **URL** | [https://www.bco-dmo.org/dataset/773466]
 
-| **Classes** | # (name 1, name2)
+| **Classes** | NaN (percentage bleaching --> continuous data)
 
-| **Format** | CSV file containing metrics like temperature, sea level, and bleaching percentages
+| **Format** | CSV file containing 62 features and 41361 entries. Features include metrics such as sea_surface_temperature, date_year, turbidity, distance_to_shore, etc.
 
 
 
