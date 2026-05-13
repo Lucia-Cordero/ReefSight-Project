@@ -86,21 +86,73 @@ def predict_tabular_api(
     if isinstance(payload, FullTabularInput):
         X_pred = pd.DataFrame([payload.dict()])
         source = "full_input"
+        fetch_errors = {}
+        fallback = {}
 
     # CASE 2 — Minimal input (lat, lon, date)
     else:
-        X_pred = build_X_pred(
-            lat=payload.latitude,
-            lon=payload.longitude,
-            dt=payload.observation_date
-        )
+        try:
+            X_pred, fetch_errors, fallback = build_X_pred(
+                lat=payload.latitude,
+                lon=payload.longitude,
+                dt=payload.observation_date
+            )
+        except Exception as e:
+            # build_X_pred should never raise — if it does it's a code-level bug
+            # all other errors are absorbed internally by X_pred_build via fetch_errors
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "Unexpected error during data enrichment.",
+                    "message": str(e)
+                }
+            )
+
+        # Any fetch failure → abort before prediction
+        if fetch_errors:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "One or more environmental variables could not be fetched. Prediction aborted.",
+                    "fetch_errors": fetch_errors,
+                    "fallback": fallback,
+                    "suggestion": "NOAA ERDDAP servers may be rate-limiting or temporarily unavailable. Please try again later."
+                }
+            )
+
         source = "auto_enriched"
 
-    prediction = predict_tabular(model=model, X_pred=X_pred)
+
+    # Guard: check for missing values before prediction
+    # is that necessary?
+    # if fetch_errors, then this should not be reached
+    missing_cols = X_pred.columns[X_pred.isnull().any()].tolist()
+    if missing_cols:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "X_pred contains missing values. Prediction aborted.",
+                "missing_columns": missing_cols,
+                "suggestion": "Some environmental variables could not be resolved. Check fetch_errors for details."
+            }
+        )
+
+    try:
+        prediction = predict_tabular(model=model, X_pred=X_pred)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Model prediction failed.",
+                "message": str(e)
+            }
+        )
 
     return {
         "prediction": prediction,
         "inputs": X_pred.to_dict(orient="records")[0],
         "feature_source": source,
+        "fetch_errors": fetch_errors,
+        "fallback_sources": fallback,
         "model_ready": True
     }
