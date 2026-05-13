@@ -1,87 +1,350 @@
 from functools import lru_cache
+from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 import requests
+from io import StringIO
+from scipy.spatial import cKDTree
+import math
 import geopandas as gpd
 from shapely.geometry import LineString, Point
 from shapely.ops import nearest_points
-from datetime import datetime, timedelta
-#from math import radians, sin, cos, asin, sqrt, atan2
-from functools import lru_cache
-from io import StringIO
-import math
 import xarray as xr
 from pyproj import Geod
-from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-@lru_cache(maxsize=256)
-def erddap_extract(dataset_id, variable, time_str, lat, lon):
+def haversine(lat1, lon1, lat2, lon2):
     """
-    Extractor for ERDDAP server temperature anomaly parameters.
+    Calculate haversine geo distances (slightly differs from 'asin' version).
+    Output mathematically the same (computational reasons)
     """
+
+    R = 6371000  # Earth radius in meters
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+@lru_cache(maxsize=8)
+def _get_erddap_grid(dataset_id):
+    """
+    Retrieve and cache the latitude/longitude grid for an ERDDAP dataset.
+    Detects latitude/longitude columns by substring matching for flexibility.
+    Returns (tree, grid_points) where tree is a KDTree over (lat, lon).
+    """
+    url = f"https://coastwatch.noaa.gov/erddap/griddap/{dataset_id}.csvp?latitude,longitude"
+    r = requests.get(url, timeout=30)
+    df = pd.read_csv(StringIO(r.text))
+
+    # Find latitude / longitude columns by substring match
+    cols = df.columns.tolist()
+    lat_col_candidates = [c for c in cols if "lat" in c.lower()]
+    lon_col_candidates = [c for c in cols if "lon" in c.lower()]
+
+    if not lat_col_candidates or not lon_col_candidates:
+        raise RuntimeError(
+            f"Could not identify latitude/longitude columns for {dataset_id}. "
+            f"Columns are: {cols}"
+        )
+
+    lat_col = lat_col_candidates[0]
+    lon_col = lon_col_candidates[0]
+
+    # Filter out NaN/inf values and build grid
+    grid_df = df[[lat_col, lon_col]].dropna()
+    grid_df = grid_df[np.isfinite(grid_df[lat_col]) & np.isfinite(grid_df[lon_col])]
+
+    if grid_df.empty:
+        raise RuntimeError(f"No valid grid points found for {dataset_id}")
+
+    grid_points = grid_df.to_numpy()
+    tree = cKDTree(grid_points)
+    return tree, grid_points
+
+def _try_nearest_4d(dataset_id, variable, time_str, lat, lon, max_km=20, max_days=365):
+    """
+    FINAL FALLBACK: ERDDAP orderByClosest(time/lat/lon) within bounds.
+    Returns (value, source_str) or (nan, None)
+    """
+    t0 = datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%SZ")
+
+    # Time window: ±max_days
+    t_start = (t0 - timedelta(days=max_days)).strftime("%Y-%m-%d")
+    t_end = (t0 + timedelta(days=max_days)).strftime("%Y-%m-%d")
+
+    # 2° spatial window around target
+    lat_min, lat_max = lat-1, lat+1
+    lon_min, lon_max = lon-1, lon+1
 
     url = (
         f"https://coastwatch.noaa.gov/erddap/griddap/{dataset_id}.csv?"
-        f"{variable}[({time_str})][({lat})][({lon})]"
+        f"{variable}"
+        f"[({t_start}):({t_end})][({lat_min}):({lat_max})][({lon_min}):({lon_max})]"
     )
 
-    r = requests.get(url, timeout=15)
-    df = pd.read_csv(StringIO(r.text))
+    try:
+        r = requests.get(url, timeout=30)
+        df = pd.read_csv(StringIO(r.text), skiprows=[1])
 
-    if df.columns[0].startswith("Error"):
-        raise RuntimeError(f"ERDDAP error:\n{r.text}")
+        if df.empty or variable not in df.columns:
+            return np.nan, None
 
-    if variable not in df.columns:
-        raise KeyError(
-            f"Variable '{variable}' not found in ERDDAP response. "
-            f"Available columns: {list(df.columns)}"
+        df[variable] = pd.to_numeric(df[variable], errors='coerce')
+        df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
+        df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
+        df['time'] = pd.to_datetime(df['time'], errors='coerce')
+        df = df.dropna(subset=[variable, 'latitude', 'longitude', 'time'])
+
+        df['gc_dist_km'] = df.apply(
+            lambda row: haversine(lat, lon, row['latitude'], row['longitude']) / 1000, axis=1
+            )
+        df['time_diff'] = (df['time'] - t0).abs()
+        df = df.sort_values(['gc_dist_km', 'time_diff'])
+
+        for _, row in df.iterrows():
+            if row['gc_dist_km'] <= max_km:
+                try:
+                    row_time = pd.to_datetime(row['time']).strftime("%Y-%m-%d")
+                except Exception:
+                    row_time = str(row['time'])[:10]
+                return float(row[variable]), f"nearest_4d({row['gc_dist_km']:.1f}km,{row_time})"
+
+        return np.nan, None
+    except:
+        return np.nan, None
+
+
+@lru_cache(maxsize=256)
+def erddap_extract(dataset_id, variable, time_str, lat, lon, max_days_back=7, max_km=50):
+    """
+    Extract a variable from NOAA ERDDAP dataset with structured fallback logic.
+    Returns a dict: {"value": float, "source": str}
+
+    Fallback order:
+      1. Exact (time, lat, lon)
+      2. Temporal fallback (up to `max_days_back` days)
+      3. Spatial fallback (nearest valid grid coordinates)
+      4. Combined temporal + spatial fallback
+      5. spatial + temporal nearest neighbour to input
+      6. Raise ValueError if no valid data found
+    """
+
+    def _try_request(time_s, la, lo):
+        url = (
+            f"https://coastwatch.noaa.gov/erddap/griddap/{dataset_id}.csv?"
+            f"{variable}[({time_s})][({la})][({lo})]"
         )
+        r = requests.get(url, timeout=60)
+        df = pd.read_csv(StringIO(r.text), skiprows=[1])
 
-    return float(df.iloc[1][variable])
+        if df.columns[0].startswith("Error"):
+            return np.nan
 
+        if variable not in df.columns:
+            return np.nan
 
-def fetch_sst_range(lat, lon, end_dt, weeks=12):
-    """
-    Fetch SST time series for the last weeks ending at end_dt.
-    Returns a list of floats.
-    """
+        val = df.iloc[0][variable]
+        return float(val) if not pd.isna(val) else np.nan
 
-    sst_values = []
-    for w in range(weeks):
-        dt = end_dt - timedelta(weeks=w)
-        time_str = dt.strftime("%Y-%m-%dT00:00:00Z")
-        try:
-            sst = erddap_extract("noaacrwsstDaily", "analysed_sst", time_str, lat, lon)
-            sst_values.append(sst)
-        except RuntimeError:
-            continue  # skip missing days
-    return sst_values[::-1]  # earliest → latest
+    # Initialise sentinels before the fallback chain
+    gc_distance_km = float('inf')
+    nearest_lat = lat
+    nearest_lon = lon
 
+    # 1) Exact
+    val = _try_request(time_str, lat, lon)
+    if not np.isnan(val):
+        return {"value": val, "source": "exact"}
 
-def compute_weekly_clim_max(lat, lon, dt, years_back=10):
-    """
-    Compute weekly climatological maximum SST for the same week of the year,
-    based on the past `years_back` years. Returns dict {week_num: max_sst}.
-    """
+    # 2) Temporal fallback
+    t0 = datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%SZ")
+    for d in range(1, max_days_back + 1):
+        t_alt = (t0 - timedelta(days=d)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        val = _try_request(t_alt, lat, lon)
+        if not np.isnan(val):
+            return {"value": val, "source": f"temporal_-{d}d"}
 
-    clim_max = {}
+    # 3) Spatial fallback: nearest grid point WITH distance check
+    tree, grid_points = _get_erddap_grid(dataset_id)
+    dist, idx = tree.query([lat, lon]) #tree.query returns 2 parameters from cKDtree object; dist = (euclidean?) distance of nearest (lat, lon) pair to input input (lat, lon) pair - irrelevant for this code; idx = index position of (lat, lon) pair nearest to input (lat, lon) pair in cKDTree
+    nearest_lat, nearest_lon = grid_points[idx]
+
+    # Convert Euclidean dist to great-circle distance (km)
+    gc_distance_km = haversine(lat, lon, nearest_lat, nearest_lon) / 1000
+
+    # Only accept if within reasonable distance for coral reefs
+    if gc_distance_km <= max_km:
+        val = _try_request(time_str, nearest_lat, nearest_lon)
+        if not np.isnan(val):
+            return {
+                "value": val,
+                "source": f"spatial_nearest({nearest_lat:.3f},{nearest_lon:.3f},{gc_distance_km:.1f}km)"
+            }
+
+        # 4) Combined fallback on SAME nearest point (still within max_km)
+        for d in range(1, max_days_back + 1):
+            t_alt = (t0 - timedelta(days=d)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            val = _try_request(t_alt, nearest_lat, nearest_lon)
+            if not np.isnan(val):
+                return {
+                    "value": val,
+                    "source": f"combined(-{d}d,{gc_distance_km:.1f}km_nearest)",
+                    "used_coordinates": f"spatial_nearest({nearest_lat:.3f},{nearest_lon:.3f})"
+                }
+
+    # 5) FINAL: True 4D nearest neighbor (wider bounds)
+    nearest_val, nearest_source = _try_nearest_4d(dataset_id, variable, time_str, lat, lon)
+    if not np.isnan(nearest_val):
+        return {"value": nearest_val, "source": nearest_source}
+
+    # 6) No data within acceptable range
+    raise ValueError(
+        f"No valid '{variable}' data within {max_km}km of ({lat:.3f}, {lon:.3f}) "
+        f"around {time_str}. Nearest grid at {gc_distance_km:.1f}km away @ {nearest_lat}, {nearest_lon}."
+    )
+
+def compute_weekly_clim_max_parallel(lat, lon, dt, years_back=10):
     end_year = dt.year
     start_year = max(end_year - years_back, 1981)
+    years = range(start_year, end_year)
 
-    for week in range(1, 53):
-        max_vals = []
-        for y in range(start_year, end_year):
-            try:
-                dt_week = datetime.strptime(f"{y}-W{week}-1", "%G-W%V-%u") #Monday
-                time_str = dt_week.strftime("%Y-%m-%dT00:00:00Z")
-                sst = erddap_extract("noaacrwsstDaily", "analysed_sst", time_str, lat, lon)
-                max_vals.append(sst)
-            except:
-                continue
-        clim_max[week] = np.max(max_vals) if max_vals else np.nan
+    def fetch_year(year):
+        t_start = f"{year}-01-01"
+        t_end   = f"{year}-12-31"
+        url = (
+            f"https://coastwatch.noaa.gov/erddap/griddap/noaacrwsstDaily.csv?"
+            f"analysed_sst"
+            f"[({t_start}):({t_end})][({lat})][({lon})]"
+        )
+        try:
+            r = requests.get(url, timeout=60)
+            if r.status_code != 200:
+                return None
+            df = pd.read_csv(StringIO(r.text), skiprows=[1])
+            if df.empty or "analysed_sst" not in df.columns:
+                return None
+            df["analysed_sst"] = pd.to_numeric(df["analysed_sst"], errors="coerce")
+            df["time"] = pd.to_datetime(df["time"], errors="coerce")
+            return df.dropna(subset=["analysed_sst", "time"])
+        except Exception:
+            return None
+
+    # below: alt code for logging http request codes per year requested, for ctrl if parallel workers are set too high (e.g. 10 for erddapp, results in initial 429 and plenty 502)
+    #     try:
+    #         r = requests.get(url, timeout=60)
+    #         if r.status_code != 200:
+    #             print(f"[{year}] HTTP {r.status_code} — skipped")
+    #             return None
+    #         df = pd.read_csv(StringIO(r.text), skiprows=[1])
+    #         if df.empty or "analysed_sst" not in df.columns:
+    #             print(f"[{year}] empty or missing column — skipped")
+    #             return None
+    #         df["analysed_sst"] = pd.to_numeric(df["analysed_sst"], errors="coerce")
+    #         df["time"] = pd.to_datetime(df["time"], errors="coerce")
+    #         df = df.dropna(subset=["analysed_sst", "time"])
+    #         print(f"[{year}] OK — {len(df)} rows")
+    #         return df
+    #     except Exception as e:
+    #         print(f"[{year}] Exception: {e} — skipped")
+    #         return None
+
+    all_dfs = []
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(fetch_year, y): y for y in years}
+        for future in as_completed(futures):
+            result = future.result()
+            if result is not None:
+                all_dfs.append(result)
+
+    if not all_dfs:
+        raise ValueError(f"No SST data returned for ({lat}, {lon}) for any year in range.")
+
+    combined = pd.concat(all_dfs, ignore_index=True)
+    combined["week"] = combined["time"].dt.isocalendar().week.astype(int)
+
+    clim_max = (
+        combined.groupby("week")["analysed_sst"]
+        .max()
+        .reindex(range(1, 53))
+        .to_dict()
+    )
+
     return clim_max
 
+# def fetch_sst_range(lat, lon, end_dt, weeks=12):
+#     """
+#     Fetch SST time series for the last `weeks` weeks ending at end_dt.
+#     Returns a list of floats (earliest → latest).
+#     """
+#     t_end   = end_dt.strftime("%Y-%m-%d")
+#     t_start = (end_dt - timedelta(weeks=weeks)).strftime("%Y-%m-%d")
+
+#     url = (
+#         f"https://coastwatch.noaa.gov/erddap/griddap/noaacrwsstDaily.csv?"
+#         f"analysed_sst"
+#         f"[({t_start}):7:({t_end})][({lat})][({lon})]"
+#     )
+
+#     try:
+#         r = requests.get(url, timeout=60)
+#         if r.status_code != 200:
+#             return []
+#         df = pd.read_csv(StringIO(r.text), skiprows=[1])
+#         if df.empty or "analysed_sst" not in df.columns:
+#             return []
+#         df["analysed_sst"] = pd.to_numeric(df["analysed_sst"], errors="coerce")
+#         df["time"] = pd.to_datetime(df["time"], errors="coerce")
+#         df = df.dropna(subset=["analysed_sst", "time"])
+#         df = df.sort_values("time")
+#         return df["analysed_sst"].tolist()
+#     except Exception:
+#         return []
+
+import time
+
+def fetch_sst_range(lat, lon, end_dt, weeks=12, max_retries=3):
+    """
+    Fetch SST time series for the last `weeks` weeks ending at end_dt.
+    Returns a list of floats (earliest → latest).
+    Retries on empty result to handle post-parallel-request server recovery.
+    """
+    t_end   = end_dt.strftime("%Y-%m-%d")
+    t_start = (end_dt - timedelta(weeks=weeks)).strftime("%Y-%m-%d")
+
+    url = (
+        f"https://coastwatch.noaa.gov/erddap/griddap/noaacrwsstDaily.csv?"
+        f"analysed_sst"
+        f"[({t_start}):7:({t_end})][({lat})][({lon})]"
+    )
+
+    for attempt in range(max_retries):
+        try:
+            r = requests.get(url, timeout=60)
+            if r.status_code == 429:
+                wait = 10 * (attempt + 1)
+                print(f"[fetch_sst_range] HTTP 429 — retrying in {wait}s (attempt {attempt+1}/{max_retries})")
+                time.sleep(wait)
+                continue
+            if r.status_code != 200:
+                print(f"[fetch_sst_range] HTTP {r.status_code} — retrying in 10s (attempt {attempt+1}/{max_retries})")
+                time.sleep(10)
+                continue
+            df = pd.read_csv(StringIO(r.text), skiprows=[1])
+            if df.empty or "analysed_sst" not in df.columns:
+                time.sleep(5)
+                continue
+            df["analysed_sst"] = pd.to_numeric(df["analysed_sst"], errors="coerce")
+            df["time"] = pd.to_datetime(df["time"], errors="coerce")
+            df = df.dropna(subset=["analysed_sst", "time"])
+            df = df.sort_values("time")
+            return df["analysed_sst"].tolist()
+        except Exception as e:
+            print(f"[fetch_sst_range] Exception: {e} — retrying in 10s (attempt {attempt+1}/{max_retries})")
+            time.sleep(10)
+
+    return []
 
 def fetch_environmental_variables(lat, lon, dt):
     """
@@ -91,18 +354,31 @@ def fetch_environmental_variables(lat, lon, dt):
     t_str = dt.strftime("%Y-%m-%dT00:00:00Z")
 
     # Fetch real ERDDAP variables
-    sst = erddap_extract("noaacrwsstDaily", "analysed_sst", t_str, lat, lon)
-    ssta = erddap_extract("noaacrwsstanomalyDaily", "sea_surface_temperature_anomaly", t_str, lat, lon)
-    ssta_dhw = erddap_extract("noaacrwdhwDaily", "degree_heating_week", t_str, lat, lon)
+    # use e.g. sstDict['source'] to retrieve fallback level for frontend output
+    sstDict = erddap_extract("noaacrwsstDaily", "analysed_sst", t_str, lat, lon)
+    sst = sstDict["value"]
+    sst_source = sstDict["source"]
+    sstaDict = erddap_extract("noaacrwsstanomalyDaily", "sea_surface_temperature_anomaly", t_str, lat, lon)
+    ssta = sstaDict["value"]
+    ssta_source = sstaDict["source"]
+    ssta_dhwDict = erddap_extract("noaacrwdhwDaily", "degree_heating_week", t_str, lat, lon)
+    ssta_dhw = ssta_dhwDict["value"]
+    ssta_dhw_source = ssta_dhwDict["source"]
 
     clim_sst = sst - ssta  # SST climatology for this day
 
 
     # Compute ClimMAX dictionary
-    clim_max_dict = compute_weekly_clim_max(lat, lon, dt, years_back=10)
+    clim_max_dict = compute_weekly_clim_max_parallel(lat, lon, dt, years_back=10)
 
     # Fetch last 12 weeks SST for TSA computation
     sst_12w = fetch_sst_range(lat, lon, dt, weeks=12)
+
+    if not sst_12w:
+        raise ValueError(
+            f"fetch_sst_range returned no SST values for ({lat}, {lon}) around {dt}. "
+            f"Cannot compute TSA/TSA_DHW."
+        )
 
     # Compute weekly climatology for these weeks
     tsa_values = []
@@ -118,46 +394,23 @@ def fetch_environmental_variables(lat, lon, dt):
     tsa = tsa_values[-1]  # latest TSA
     tsa_dhw = np.sum(tsa_values) / 7  # sum over last 12 weeks / 7 = degree heating weeks
 
-
-    return {
-        "ClimSST": clim_sst,
-        "SSTA": ssta,
-        "SSTA_DHW": ssta_dhw,
-        "TSA": tsa,
-        "TSA_DHW": tsa_dhw
+    env = {
+        "Temperature_Kelvin": float(sst),
+        "ClimSST": float(clim_sst),
+        "SSTA": float(ssta),
+        "SSTA_DHW": float(ssta_dhw),
+        "TSA": float(tsa),
+        "TSA_DHW": float(tsa_dhw)
     }
 
-################################################################################
+    source = {
+        "sst_source": sst_source,
+        "ssta_source": ssta_source,
+        "ssta_dhw_source": ssta_dhw_source
 
+    }
 
-@lru_cache(maxsize=2048)
-def fetch_air_temperature_k(lat, lon, dt):
-    """
-    Get air temperature close to sea surface from NASA Earth observations
-    """
-
-    date_str = dt.strftime("%Y%m%d")
-
-    url = (
-        "https://power.larc.nasa.gov/api/temporal/daily/point"
-        f"?parameters=T2M"
-        f"&start={date_str}&end={date_str}"
-        f"&latitude={lat}&longitude={lon}"
-        f"&community=AG"
-        f"&format=JSON"
-    )
-
-    r = requests.get(url, timeout=20)
-    data = r.json()
-
-    if "properties" not in data:
-        raise ValueError(f"NASA POWER error: {data}")
-
-    params = data["properties"].get("parameter", {})
-    if "T2M" not in params or date_str not in params["T2M"]:
-        raise ValueError(f"T2M missing for {date_str} at ({lat},{lon})")
-
-    return params["T2M"][date_str] + 273.15
+    return env, source
 
 
 ################################################################################
@@ -179,33 +432,23 @@ def fetch_air_temperature_k(lat, lon, dt):
 # ±50 m (GSHHG h)
 
 # Vectorized haversine (returns distance in meters)
-def haversine(lat1, lon1, lat2, lon2):
-    """
-    Calculate haversine geo distances (slightly differs from 'asin' version).
-    Output mathematically the same (computational reasons)
-    """
-
-    R = 6371000  # Earth radius in meters
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lon2 - lon1)
-    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
 def distance_to_shore(lat, lon, coast):
-    """
-    Returns distance to nearest coastline in meters (accurate to polygon edges).
-    """
 
     ## creates a geodetic calculator using the WGS84 reference ellipsoid (standard Earth model used by GPS)
+    ## more accurate than haversine
     geod = Geod(ellps="WGS84")
-
     point = Point(lon, lat)
-    min_dist = float('inf')
 
-    for geom in coast.geometry:
-        # find the true nearest point on the geometry
+    # Use spatial index to pre-filter candidate geometries
+    # critical, this snippet may need to be changed depending on the geopandas version used
+    #candidates_idx = list(coast.sindex.nearest(point.bounds, 5, all_matches=False)) # 5 nearest geometries
+    candidates_idx = list(coast.sindex.nearest(point, return_all=False))[1].tolist()
+    candidates = coast.iloc[candidates_idx]
+
+    min_dist = float('inf')
+    for geom in candidates.geometry:
         nearest = nearest_points(point, geom)[1]
         _, _, dist_m = geod.inv(lon, lat, nearest.x, nearest.y)
         if dist_m < min_dist:
@@ -233,7 +476,7 @@ def distance_to_shore(lat, lon, coast):
 # ±20–50 m (deep ocean)
 
 
-def depth_from_opentopo(lat, lon, timeout=10):
+def depth_from_opentopo(lat, lon, timeout=15):
     """
     Returns ocean depth in meters using OpenTopoData (GEBCO 2020).
     Positive = water depth, 0 = land.
@@ -349,20 +592,24 @@ def _classify(fetch, region_info):
     # Rule 1: Facing prevailing winds
     for d in region_info["prevailing_dirs"]:
         nearest = min(fetch, key=lambda b: abs(b - d))
-        #print(f"Comparing fetch direction {d}° to nearest {nearest}°: {fetch[nearest]} km")
+         #print(f"Comparing fetch direction {d}° to nearest {nearest}°: {fetch[nearest]} km")
         if fetch[nearest] >= FETCH_THRESHOLD_KM:
             return "EXPOSED"
 
-    # Rule 2: Narrow window + cyclones
-    long_dirs = [b for b, f in fetch.items() if f >= FETCH_THRESHOLD_KM]
+    # Rule 2: Narrow window + cyclones — with 360° wrapping fix
+    long_dirs = sorted([b for b, f in fetch.items() if f >= FETCH_THRESHOLD_KM])
     #print(f"Long fetch directions: {long_dirs}")
 
     if long_dirs and region_info["cyclone"]:
         #print(f"Fetch span (°): {max(long_dirs) - min(long_dirs)}")
-        if max(long_dirs) - min(long_dirs) <= NARROW_WINDOW_DEG:
+        # Compute gaps between consecutive directions (including wrap-around gap)
+        gaps = [long_dirs[i+1] - long_dirs[i] for i in range(len(long_dirs)-1)]
+        gaps.append(360 - long_dirs[-1] + long_dirs[0])  # wrap-around gap
+        largest_gap = max(gaps)
+        angular_span = 360 - largest_gap  # actual span of fetch directions
+        if angular_span <= NARROW_WINDOW_DEG:
             return "SOMETIMES"
 
-    # Rule 3
     return "SHELTERED"
 
 def classify_exposure(lat, lon, coast):
@@ -422,8 +669,8 @@ def cyclone_frequency(lat, lon):
 
     for df in chunks:
         df['SEASON'] = pd.to_numeric(df['SEASON'], errors='coerce')
-        #df['LAT'] = pd.to_numeric(df['LAT'], errors='coerce')
-        #df['LON'] = pd.to_numeric(df['LON'], errors='coerce')
+        df['LAT'] = pd.to_numeric(df['LAT'], errors='coerce')
+        df['LON'] = pd.to_numeric(df['LON'], errors='coerce')
         df = df[(df['SEASON'] >= 1975) & (df['SEASON'] <= 2025)]
         df = df[['SID','LAT','LON']].dropna()
 
@@ -432,119 +679,108 @@ def cyclone_frequency(lat, lon):
             (df["LON"].between(lon-2, lon+2))
         ]
 
-        for _, row in df.iterrows():
-            dist = haversine(lat, lon, row['LAT'], row['LON'])
-            if dist <= 200000: # meters!, not kilometers in our case!
-                storm_ids.add(row['SID'])
+        #for _, row in df.iterrows():
+        #    dist = haversine(lat, lon, row['LAT'], row['LON'])
+        #    if dist <= 250000: # meters!, not kilometers in our case!
+        #        storm_ids.add(row['SID'])
+
+        # Instead of iterrows loop, vectorise
+        # Vectorised planar distance approximation (accurate within small bbox):
+        df['dist'] = np.sqrt(((df['LAT'] - lat) * 111000)**2 +
+                             ((df['LON'] - lon) * 111000 * np.cos(np.radians(lat)))**2)
+        df = df[df['dist'] <= 250000]
+        storm_ids.update(df['SID'].tolist())
 
     return len(storm_ids)
 
 ###############################################################################
 
-def turbidity(lat, lon, dt):
+def _get_turbidity_time_bounds():
+    """Query ERDDAP metadata to get actual first and last available dates."""
+    url = "https://coastwatch.noaa.gov/erddap/info/noaacwNPPVIIRSSQkd490Monthly/index.csv"
+    r = requests.get(url, timeout=30)
+    df = pd.read_csv(StringIO(r.text))
 
-    # important: dates back to 2012 only!
-    url = "https://coastwatch.noaa.gov/erddap/griddap/noaacwNPPVIIRSSQkd490Daily"
-    ds = xr.open_dataset(url, engine="pydap")
+    time_rows = df[df["Attribute Name"].isin(["time_coverage_start", "time_coverage_end"])]
+    bounds = dict(zip(time_rows["Attribute Name"], time_rows["Value"]))
 
-    # Fixed bounding box half-width
-    # kd490 in 100km window around coordinates
-    # 100km ~ 0.9°
-    # so query bounding boxes need to be:
-    # lat ± 0.9
-    # lon ± 0.9
+    #t_start = pd.to_datetime(bounds["time_coverage_start"]).strftime("%Y-%m-%d")
+    t_end   = pd.to_datetime(bounds["time_coverage_end"]).strftime("%Y-%m-%d")
+    #return t_start, t_end
+    return t_end
+
+def turbidity(lat, lon):
+    """
+    Compute mean Kd490 turbidity over the last 10 years from present
+    within a 100km buffer (~0.9°) around (lat, lon).
+    Uses VIIRS monthly composites via direct ERDDAP HTTP request.
+    Matches BCO-DMO: static site property, not date-specific.
+    """
+
     lat_tol = lon_tol = 0.9
+    lon = ((lon + 180) % 360) - 180
 
-    # Normalize longitude to [-180, 180]
-    if lon > 180:
-        lon -= 360
-    elif lon < -180:
-        lon += 360
-
-    # Create bounding box
     lat_min, lat_max = lat - lat_tol, lat + lat_tol
     lon_min, lon_max = lon - lon_tol, lon + lon_tol
 
-     # Latitude (descending) and Longitude (ascending) arrays
-    lat_vals = ds.latitude.values
-    lon_vals = ds.longitude.values
 
-    # Latitude indices (descending)
-    # matching coordinates with actual nearest values in dataset
-    lat_start_idx = np.searchsorted(lat_vals[::-1], lat_min, side='left')
-    lat_stop_idx  = np.searchsorted(lat_vals[::-1], lat_max, side='right')
-    lat_slice = slice(len(lat_vals) - lat_stop_idx, len(lat_vals) - lat_start_idx)
+    # Last 10 years from last available date
+    t_end   = _get_turbidity_time_bounds()
+    t_start = (pd.to_datetime(t_end) - pd.DateOffset(years=10)).strftime("%Y-%m-%d")
 
-    # Longitude indices (ascending)
-    # matching coordinates with actual nearest values in dataset
-    lon_start_idx = np.searchsorted(lon_vals, lon_min, side='left')
-    lon_stop_idx  = np.searchsorted(lon_vals, lon_max, side='right')
-    lon_slice = slice(lon_start_idx, lon_stop_idx)
+    print(f"[turbidity] querying ({lat}, {lon}), bbox: lat=[{lat_min},{lat_max}], lon=[{lon_min},{lon_max}]")
+    print(f"[turbidity] time window: {t_start} to {t_end}")
 
-    # Select spatial subset
-    sub = ds.isel(latitude=lat_slice, longitude=lon_slice)
+    url = (
+        f"https://coastwatch.noaa.gov/erddap/griddap/noaacwNPPVIIRSSQkd490Monthly.csv?"
+        f"kd_490[({t_start}):1:({t_end})][(0):1:(0)][({lat_min}):5:({lat_max})][({lon_min}):5:({lon_max})]"
+    )
 
-    # Select nearest time
-    try:
-        sub = sub.sel(time=np.datetime64(dt), method="nearest")
-    except KeyError:
-        print(f"No data for requested date {dt}")
-        return np.array([])
+    print(f"[turbidity] requesting {t_start} to {t_end}")
+    import time
+    t0 = time.time()
+    r = requests.get(url, timeout=60)
+    print(f"[turbidity] HTTP {r.status_code} — download took {time.time()-t0:.1f}s")
 
-    # Extract kd_490 values
-    if "kd_490" not in sub:
-        print("kd_490 variable not found in subset")
-        return np.array([])
+    if r.status_code != 200:
+        print(f"[turbidity] non-200 response: {r.text[:300]}")
+        raise ValueError(f"turbidity fetch failed for ({lat}, {lon}): HTTP {r.status_code}")
 
-    vals = sub["kd_490"].values
+    df = pd.read_csv(StringIO(r.text), skiprows=[1])
+    if df.empty or "kd_490" not in df.columns:
+        raise ValueError(f"kd_490 missing in response for ({lat}, {lon})")
 
-    # Filter invalid data
-    if vals.size > 0:
-        vals = vals[np.isfinite(vals)]
-        vals = vals[(vals >= 0) & (vals <= 5)]
+    df["kd_490"] = pd.to_numeric(df["kd_490"], errors="coerce")
+    vals = df["kd_490"].dropna().values
+    vals = vals[(vals >= 0) & (vals <= 5)]
 
-    return float(vals.mean())
+    if vals.size == 0:
+        return np.nan
+
+    kd490_static = float(vals.mean())
+    print(f"[turbidity] {vals.size} valid pixels — mean Kd490={kd490_static:.4f}")
+    return kd490_static
 
 ###############################################################################
 
 def windspeed(lat, lon, dt):
     """
-    Fetch and compute windspeed parametersfor coordinates in .25 degree stepping
+    Fetch windspeed (m/s) from NOAA Blended Winds Daily dataset.
+    Returns scalar wind speed computed from u and v components.
     """
 
     t = dt.strftime("%Y-%m-%dT00:00:00Z")
     base = "https://coastwatch.noaa.gov/erddap/griddap"
     dataset = "noaacwBlendedWindsDaily"
 
+    # Convert to 0-360 longitude convention used by this dataset
     if lon < 0:
         lon += 360
 
-    # fetch available lat/lon points
-    # they have 0.25 spacing
-    url_lats = f"{base}/{dataset}.csv?latitude"
-    df_lats = pd.read_csv(StringIO(requests.get(url_lats).text), skiprows=[1])
-    lats_available = df_lats['latitude'].to_numpy()
+    # Snap to nearest 0.25° grid point without extra HTTP requests
+    lat = round(round(lat / 0.25) * 0.25, 2)
+    lon = round(round(lon / 0.25) * 0.25, 2)
 
-    url_lons = f"{base}/{dataset}.csv?longitude"
-    df_lons = pd.read_csv(StringIO(requests.get(url_lons).text), skiprows=[1])
-    lons_available = df_lons['longitude'].to_numpy()
-
-    # snap to nearest available grid point
-    lat = lats_available[np.abs(lats_available - lat).argmin()]
-    lon = lons_available[np.abs(lons_available - lon).argmin()]
-
-    # fetch available times
-    # not necessary because 'P1D' = 1 entry per day
-    #url_times = f"{base}/{dataset}.csv?time"
-    #df_times = pd.read_csv(StringIO(requests.get(url_times).text), skiprows=[1])
-    #times = pd.to_datetime(df_times['time'], utc=True)
-
-    # snap to nearest available time
-    #target = pd.Timestamp(dt).tz_localize('UTC')
-    #nearest_time = times.iloc[(times - target).abs().argmin()]
-    #t = nearest_time.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    # equals vertical level to sea level
     zlev = 0
 
     url = (
@@ -553,16 +789,18 @@ def windspeed(lat, lon, dt):
         f"v_wind[({t})][{zlev}][({lat})][({lon})]"
     )
 
-    r = requests.get(url)
+    r = requests.get(url, timeout=15)
     r.raise_for_status()
 
     df = pd.read_csv(StringIO(r.text), skiprows=[1])
 
-    # Column names are exactly these:
+    if df.empty or "u_wind" not in df.columns or "v_wind" not in df.columns:
+        raise ValueError(f"windspeed: missing u_wind/v_wind in response for ({lat}, {lon}) at {t}")
+
     u = float(df.loc[0, "u_wind"])
     v = float(df.loc[0, "v_wind"])
 
-    return float(np.sqrt(u*u + v*v))
+    return float(np.sqrt(u**2 + v**2))
 
 ###############################################################################
 
@@ -575,49 +813,129 @@ def build_X_pred(lat, lon, dt):
     ## i = intermediate
     ## h = high
     ## f = full
-
-    BASE_DIR = Path(__file__).resolve().parent
-    coast_path = BASE_DIR / "gshhg-shp-2.3.7" / "GSHHS_h_L1.shp"
-
-    coast = gpd.read_file(coast_path)
+    coast = gpd.read_file("/home/nico_kas/code/Lucia-Cordero/ReefSight-Project/tabular/gshhg-shp-2.3.7/GSHHS_h_L1.shp")
     coast = coast.to_crs("EPSG:4326")
 
+    if isinstance(dt, str):
+        dt = datetime.strptime(dt, "%Y-%m-%d")
 
-    env = fetch_environmental_variables(lat, lon, dt)
-    #print(env)
-    air_k = fetch_air_temperature_k(lat, lon, dt)
-    #print(air_k)
-    dist = distance_to_shore(lat, lon, coast)
-    #print(dist)
-    depth = depth_from_opentopo(lat, lon)
-    #print(depth)
-    exp = classify_exposure(lat, lon, coast)
-    #print(exp)
-    turb = turbidity(lat, lon, dt)
-    #print(turb)
-    cyc = cyclone_frequency(lat, lon)
-    #print(cyc)
-    wind = windspeed(lat, lon, dt)
-    #print(wind)
+    print("\nFetching environmental data...")
 
-    return pd.DataFrame(dict(
-        Latitude_Degrees=[lat],
-        Longitude_Degrees=[lon],
-        Date_Year=[dt.year],
-        Date_Month=[dt.month],
-        Distance_to_Shore=[dist],
-        Turbidity=[turb],
-        Cyclone_Frequency=[cyc],
-        Depth_m=[depth],
-        Exposure=[exp],
-        ClimSST=[env["ClimSST"]],
-        Temperature_Kelvin=[air_k],
-        Windspeed=[wind],
-        SSTA=[env["SSTA"]],
-        SSTA_DHW=[env["SSTA_DHW"]],
-        TSA=[env["TSA"]],
-        TSA_DHW=[env["TSA_DHW"]]
-    ))
+    fetch_errors = {}
+    fallback = {}
+    results = {}
+
+    # --- Individual fetches with per-variable error capture ---
+
+    try:
+        env, source = fetch_environmental_variables(lat, lon, dt)
+        results["env"] = env
+        fallback.update({
+            "SST": source.get("sst_source"),
+            "SSTA": source.get("ssta_source"),
+            "SSTA_DHW": source.get("ssta_dhw_source"),
+        })
+        print("  ✓ SST/SSTA/DHW/TSA variables")
+    except Exception as e:
+        fetch_errors["env"] = str(e)
+        print(f"  ✗ SST/SSTA/DHW/TSA variables: {e}")
+
+    try:
+        dist = distance_to_shore(lat, lon, coast)
+        results["dist"] = dist
+        print("  ✓ Distance to shore")
+    except Exception as e:
+        fetch_errors["dist"] = str(e)
+        print(f"  ✗ Distance to shore: {e}")
+
+    try:
+        depth = depth_from_opentopo(lat, lon)
+        results["depth"] = depth
+        print("  ✓ Depth")
+    except Exception as e:
+        fetch_errors["depth"] = str(e)
+        print(f"  ✗ Depth: {e}")
+
+    try:
+        exp = classify_exposure(lat, lon, coast)
+        results["exp"] = exp
+        print("  ✓ Exposure")
+    except Exception as e:
+        fetch_errors["exp"] = str(e)
+        print(f"  ✗ Exposure: {e}")
+
+    try:
+        turb = turbidity(lat, lon)
+        results["turb"] = turb
+        print("  ✓ Turbidity")
+    except Exception as e:
+        fetch_errors["turb"] = str(e)
+        print(f"  ✗ Turbidity: {e}")
+
+    try:
+        cyc = cyclone_frequency(lat, lon)
+        results["cyc"] = cyc
+        print("  ✓ Cyclone frequency")
+    except Exception as e:
+        fetch_errors["cyc"] = str(e)
+        print(f"  ✗ Cyclone frequency: {e}")
+
+    try:
+        wind = windspeed(lat, lon, dt)
+        results["wind"] = wind
+        print("  ✓ Windspeed")
+    except Exception as e:
+        fetch_errors["wind"] = str(e)
+        print(f"  ✗ Windspeed: {e}")
+
+
+    # --- Build prediction dataframe ---
+    # Build X_pred — use NaN for any failed fetch so missing_cols check catches it
+
+    #env = results["env"]
+    env = results.get("env", {}) # bc safe lookup in case "env" doesn't exist, no keyerror
+    # X_pred = pd.DataFrame(dict(
+    #     Latitude_Degrees=[lat],
+    #     Longitude_Degrees=[lon],
+    #     Date_Year=[dt.year],
+    #     Date_Month=[dt.month],
+    #     Distance_to_Shore=[results["dist"]],
+    #     Turbidity=[results["turb"]],
+    #     Cyclone_Frequency=[results["cyc"]],
+    #     Depth_m=[results["depth"]],
+    #     Exposure=[results["exp"]],
+    #     ClimSST=[env["ClimSST"]],
+    #     Temperature_Kelvin=[env["Temperature_Kelvin"]],
+    #     Windspeed=[results["wind"]],
+    #     SSTA=[env["SSTA"]],
+    #     SSTA_DHW=[env["SSTA_DHW"]],
+    #     TSA=[env["TSA"]],
+    #     TSA_DHW=[env["TSA_DHW"]]
+    # ))
+    # old version built df from dictionary of columns
+    # new version: builds from a list of row dictionaries
+    # + adds missing value behavior (np.nan, caught downstream)
+    X_pred = pd.DataFrame([{
+        "Latitude_Degrees":   lat,
+        "Longitude_Degrees":  lon,
+        "Date_Year":          dt.year,
+        "Date_Month":         dt.month,
+        "Distance_to_Shore":  results.get("dist",  np.nan),
+        "Turbidity":          results.get("turb",  np.nan),
+        "Cyclone_Frequency":  results.get("cyc",   np.nan),
+        "Depth_m":            results.get("depth", np.nan),
+        "Exposure":           results.get("exp",   np.nan),
+        "ClimSST":            env.get("ClimSST",   np.nan),
+        "Temperature_Kelvin": env.get("Temperature_Kelvin",np.nan),
+        "Windspeed":          results.get("wind",  np.nan),
+        "SSTA":               env.get("SSTA",      np.nan),
+        "SSTA_DHW":           env.get("SSTA_DHW",  np.nan),
+        "TSA":                env.get("TSA",       np.nan),
+        "TSA_DHW":            env.get("TSA_DHW",   np.nan),
+    }])
+
+
+    return X_pred, fetch_errors, fallback
 
 
 # ---------------- Example ---------------- #

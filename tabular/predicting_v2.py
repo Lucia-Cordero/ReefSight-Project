@@ -136,7 +136,7 @@ def erddap_extract(dataset_id, variable, time_str, lat, lon, max_days_back=7, ma
             f"https://coastwatch.noaa.gov/erddap/griddap/{dataset_id}.csv?"
             f"{variable}[({time_s})][({la})][({lo})]"
         )
-        r = requests.get(url, timeout=30)
+        r = requests.get(url, timeout=60)
         df = pd.read_csv(StringIO(r.text), skiprows=[1])
 
         if df.columns[0].startswith("Error"):
@@ -273,10 +273,42 @@ def compute_weekly_clim_max_parallel(lat, lon, dt, years_back=10):
 
     return clim_max
 
-def fetch_sst_range(lat, lon, end_dt, weeks=12):
+# def fetch_sst_range(lat, lon, end_dt, weeks=12):
+#     """
+#     Fetch SST time series for the last `weeks` weeks ending at end_dt.
+#     Returns a list of floats (earliest → latest).
+#     """
+#     t_end   = end_dt.strftime("%Y-%m-%d")
+#     t_start = (end_dt - timedelta(weeks=weeks)).strftime("%Y-%m-%d")
+
+#     url = (
+#         f"https://coastwatch.noaa.gov/erddap/griddap/noaacrwsstDaily.csv?"
+#         f"analysed_sst"
+#         f"[({t_start}):7:({t_end})][({lat})][({lon})]"
+#     )
+
+#     try:
+#         r = requests.get(url, timeout=60)
+#         if r.status_code != 200:
+#             return []
+#         df = pd.read_csv(StringIO(r.text), skiprows=[1])
+#         if df.empty or "analysed_sst" not in df.columns:
+#             return []
+#         df["analysed_sst"] = pd.to_numeric(df["analysed_sst"], errors="coerce")
+#         df["time"] = pd.to_datetime(df["time"], errors="coerce")
+#         df = df.dropna(subset=["analysed_sst", "time"])
+#         df = df.sort_values("time")
+#         return df["analysed_sst"].tolist()
+#     except Exception:
+#         return []
+
+import time
+
+def fetch_sst_range(lat, lon, end_dt, weeks=12, max_retries=3):
     """
     Fetch SST time series for the last `weeks` weeks ending at end_dt.
     Returns a list of floats (earliest → latest).
+    Retries on empty result to handle post-parallel-request server recovery.
     """
     t_end   = end_dt.strftime("%Y-%m-%d")
     t_start = (end_dt - timedelta(weeks=weeks)).strftime("%Y-%m-%d")
@@ -287,20 +319,32 @@ def fetch_sst_range(lat, lon, end_dt, weeks=12):
         f"[({t_start}):7:({t_end})][({lat})][({lon})]"
     )
 
-    try:
-        r = requests.get(url, timeout=60)
-        if r.status_code != 200:
-            return []
-        df = pd.read_csv(StringIO(r.text), skiprows=[1])
-        if df.empty or "analysed_sst" not in df.columns:
-            return []
-        df["analysed_sst"] = pd.to_numeric(df["analysed_sst"], errors="coerce")
-        df["time"] = pd.to_datetime(df["time"], errors="coerce")
-        df = df.dropna(subset=["analysed_sst", "time"])
-        df = df.sort_values("time")
-        return df["analysed_sst"].tolist()
-    except Exception:
-        return []
+    for attempt in range(max_retries):
+        try:
+            r = requests.get(url, timeout=60)
+            if r.status_code == 429:
+                wait = 10 * (attempt + 1)
+                print(f"[fetch_sst_range] HTTP 429 — retrying in {wait}s (attempt {attempt+1}/{max_retries})")
+                time.sleep(wait)
+                continue
+            if r.status_code != 200:
+                print(f"[fetch_sst_range] HTTP {r.status_code} — retrying in 10s (attempt {attempt+1}/{max_retries})")
+                time.sleep(10)
+                continue
+            df = pd.read_csv(StringIO(r.text), skiprows=[1])
+            if df.empty or "analysed_sst" not in df.columns:
+                time.sleep(5)
+                continue
+            df["analysed_sst"] = pd.to_numeric(df["analysed_sst"], errors="coerce")
+            df["time"] = pd.to_datetime(df["time"], errors="coerce")
+            df = df.dropna(subset=["analysed_sst", "time"])
+            df = df.sort_values("time")
+            return df["analysed_sst"].tolist()
+        except Exception as e:
+            print(f"[fetch_sst_range] Exception: {e} — retrying in 10s (attempt {attempt+1}/{max_retries})")
+            time.sleep(10)
+
+    return []
 
 def fetch_environmental_variables(lat, lon, dt):
     """
@@ -643,7 +687,7 @@ def cyclone_frequency(lat, lon):
 def _get_turbidity_time_bounds():
     """Query ERDDAP metadata to get actual first and last available dates."""
     url = "https://coastwatch.noaa.gov/erddap/info/noaacwNPPVIIRSSQkd490Monthly/index.csv"
-    r = requests.get(url, timeout=15)
+    r = requests.get(url, timeout=60)
     df = pd.read_csv(StringIO(r.text))
 
     time_rows = df[df["Attribute Name"].isin(["time_coverage_start", "time_coverage_end"])]
@@ -734,7 +778,7 @@ def windspeed(lat, lon, dt):
         f"v_wind[({t})][{zlev}][({lat})][({lon})]"
     )
 
-    r = requests.get(url, timeout=15)
+    r = requests.get(url, timeout=30)
     r.raise_for_status()
 
     df = pd.read_csv(StringIO(r.text), skiprows=[1])
