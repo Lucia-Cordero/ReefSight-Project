@@ -113,10 +113,10 @@ def predict_tabular_api(
             raise HTTPException(
                 status_code=503,
                 detail={
-                    "error": "One or more environmental variables could not be fetched. Prediction aborted.",
+                    "error": "Environmental data fetching failed. Prediction aborted.",
                     "fetch_errors": fetch_errors,
                     "fallback": fallback,
-                    "suggestion": "NOAA ERDDAP servers may be rate-limiting or temporarily unavailable. Please try again later."
+                    "suggestion": "Please try again later. The NOAA ERDDAP servers may be rate-limiting or temporarily unavailable."
                 }
             )
 
