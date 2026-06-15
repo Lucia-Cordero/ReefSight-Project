@@ -259,7 +259,7 @@ def compute_weekly_clim_max_parallel(lat, lon, dt, years_back=10):
                 all_dfs.append(result)
 
     if not all_dfs:
-        raise ValueError(f"No SST data returned for ({lat}, {lon}) for any year in range.")
+        raise ValueError(f"No SST data returned for ({lat}, {lon}) within a {years_back} year window from {dt}, therefore could not compute TSA/TSA_DHW.")
 
     combined = pd.concat(all_dfs, ignore_index=True)
     combined["week"] = combined["time"].dt.isocalendar().week.astype(int)
@@ -813,7 +813,7 @@ def build_X_pred(lat, lon, dt):
     ## i = intermediate
     ## h = high
     ## f = full
-    coast = gpd.read_file("/home/nico_kas/code/Lucia-Cordero/ReefSight-Project/tabular/gshhg-shp-2.3.7/GSHHS_h_L1.shp")
+    coast = gpd.read_file("/home/lucia/code/Lucia-Cordero/08-ReefSight/project_logic/gshhg-shp-2.3.7/GSHHS_h_L1.shp")
     coast = coast.to_crs("EPSG:4326")
 
     if isinstance(dt, str):
