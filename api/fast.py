@@ -51,22 +51,22 @@ def root():
 # -----------------------------------------------------------------------
 
 @app.post("/predict/image")
-async def predict_image_api(image_file: UploadFile= File(...)):
+async def predict_image_api(image_file: UploadFile = File(...)):
 
-    # Make sure it's an image
     if not image_file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
 
-    # Read uploaded image bytes
     image_bytes = await image_file.read()
-
-
-    # Call prediction function "predict_image"
     model = app.state.image_model
     prediction = predict_image(model=model, image_bytes=image_bytes)
 
     return {
-        "prediction": prediction,
+        "prediction": {
+            "predicted_class": prediction["predicted_class"],
+            "probability_bleached": prediction["probability_bleached"],
+            "probability_healthy": prediction["probability_healthy"],
+        },
+        "gradcam_image": prediction["gradcam_image"],  # ← top level
         "inputs": {"filename": image_file.filename},
         "model_ready": True
     }
