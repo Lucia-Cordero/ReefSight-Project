@@ -17,26 +17,39 @@ import os
 # -----------------------------------------------------------------------
 
 
-def load_img(img_bytes: bytes):
+# def load_img(img_bytes: bytes):
 
-    img = Image.open(io.BytesIO(img_bytes))
-    print("✅ Image successfully loaded as", type(img))
+#     img = Image.open(io.BytesIO(img_bytes))
+#     print("✅ Image successfully loaded as", type(img))
 
-    img = img.convert('RGB')
-    print("✅ Image converted to RGB")
+#     img = img.convert('RGB')
+#     print("✅ Image converted to RGB")
 
-    img = img.resize((224, 224))
-    print("✅ Image resized")
+#     img = img.resize((224, 224))
+#     print("✅ Image resized")
 
-    img = img_to_array(img) #shape = (224, 224, 3)
-    print("✅ Image successfully converted to", type(img), img.shape)
+#     img = img_to_array(img) #shape = (224, 224, 3)
+#     print("✅ Image successfully converted to", type(img), img.shape)
 
-    img = img.reshape((-1, 224, 224, 3))
-    print("✅ Image successfully reshaped as ndarray of shape", img.shape)
+#     img = img.reshape((-1, 224, 224, 3))
+#     print("✅ Image successfully reshaped as ndarray of shape", img.shape)
 
-    return img
+#     return img
 
+def load_img_with_original(img_bytes: bytes):
+    """
+    Same as load_img but also returns the original uint8 (224,224,3)
+    array needed to blend the GradCAM overlay onto.
+    """
+    img = Image.open(io.BytesIO(img_bytes)).convert('RGB').resize((224, 224))
 
+    original_np = np.array(img, dtype=np.uint8)   # (224, 224, 3) — for overlay
+
+    img_array = img_to_array(img)                  # (224, 224, 3) float32
+    img_array = img_array.reshape((-1, 224, 224, 3))  # (1, 224, 224, 3)
+
+    print("✅ Loaded original image for GradCAM overlay and image array for feeding into model")
+    return img_array, original_np
 
 # -----------------------------------------------------------------------
 #                       PREPROCESSING : TABULAR
