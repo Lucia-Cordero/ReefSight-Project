@@ -768,7 +768,7 @@ def build_X_pred(lat, lon, dt):
     ## i = intermediate
     ## h = high
     ## f = full
-    coast = gpd.read_file("/home/lucia/code/Lucia-Cordero/08-ReefSight/project_logic/gshhg-shp-2.3.7/GSHHS_h_L1.shp")
+    coast = gpd.read_file(os.path.join(os.path.dirname(__file__), "gshhg-shp-2.3.7", "GSHHS_h_L1.shp"))
     coast = coast.to_crs("EPSG:4326")
 
     if isinstance(dt, str):
