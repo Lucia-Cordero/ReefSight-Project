@@ -6,6 +6,7 @@ import os
 import tensorflow as tf
 import cv2
 import base64
+import matplotlib
 from io import BytesIO
 from PIL import Image
 
@@ -49,8 +50,7 @@ def predict_image(model=None, image_bytes=None):
     gradcam_b64 = render_gradcam_overlay(original_np, cam)
 
     print('✅ Image prediction + GradCAM ready')
-    print(f'✅ gradcam_image key present: {"gradcam_image" is not None}')
-    print(f'✅ gradcam_b64 length: {len(gradcam_b64)}')  # should be a large number
+
 
     return {
         "predicted_class": predicted_class,
@@ -80,7 +80,7 @@ def compute_gradcam(model, img_array: np.ndarray) -> np.ndarray:
         outputs=[last_conv_layer.output, vgg_base.output]
     )
 
-    # Step 1: manually run through preprocessing layers (no gradients needed)
+    # Step 1: manually run through preprocessing layers
     x = img_array
     for layer in preprocessing_layers:
         x = layer(x, training=False)
@@ -111,31 +111,29 @@ def compute_gradcam(model, img_array: np.ndarray) -> np.ndarray:
 
 
 def render_gradcam_overlay(original_np: np.ndarray, cam: np.ndarray,
-                           alpha: float = 0.45) -> str:
-    """
-    Blends the GradCAM heatmap over the original image and
-    returns it as a base64-encoded PNG string for the frontend.
-
-    Args:
-        original_np:  uint8 array (224, 224, 3) — original image pixels
-        cam:          float32 array (224, 224) in [0,1] from compute_gradcam
-        alpha:        heatmap opacity (0 = invisible, 1 = fully opaque)
-
-    Returns:
-        base64-encoded PNG string
-    """
-    # Convert 0-1 float map → 0-255 and apply JET colour scale
-    # (blue=cold/unimportant, red=hot/important)
-    heatmap = cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_JET)
-
-    # OpenCV works in BGR; convert to RGB so colours display correctly
+                           alpha: float = 0.55) -> str:
+    # Heatmap + blend (unchanged)
+    heatmap = cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_INFERNO)
     heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
-
-    # Blend: alpha% heatmap + (1-alpha)% original photo
     overlay = (alpha * heatmap + (1 - alpha) * original_np).astype(np.uint8)
 
-    # Convert numpy array → PNG → base64 string for HTTP transport
-    pil_img = Image.fromarray(overlay)
+    # --- Colorbar from the CV2 LUT directly ---
+    img_w = overlay.shape[1]
+
+    # 1-pixel-tall gradient strip spanning the full 0-255 JET range
+    gradient = np.arange(256, dtype=np.uint8).reshape(1, 256)
+    colorbar_strip = cv2.applyColorMap(gradient, cv2.COLORMAP_INFERNO)
+    colorbar_strip = cv2.cvtColor(colorbar_strip, cv2.COLOR_BGR2RGB)
+
+    # Resize to match overlay width and give it some height
+    colorbar_strip = cv2.resize(
+        colorbar_strip, (img_w, 20), interpolation=cv2.INTER_LINEAR
+    )
+
+    # Simple white label bar underneath (optional but readable)
+    combined = np.vstack([overlay, colorbar_strip])
+
+    pil_img = Image.fromarray(combined)
     buf = BytesIO()
     pil_img.save(buf, format="PNG")
     return base64.b64encode(buf.getvalue()).decode()
