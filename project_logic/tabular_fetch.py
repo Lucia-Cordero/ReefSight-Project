@@ -7,11 +7,13 @@ from io import StringIO
 from scipy.spatial import cKDTree
 import math
 import geopandas as gpd
+import os
 from shapely.geometry import LineString, Point
 from shapely.ops import nearest_points
 import xarray as xr
 from pyproj import Geod
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
 
 
 def haversine(lat1, lon1, lat2, lon2):
