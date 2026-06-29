@@ -10,31 +10,10 @@ import os
 
 
 
-
-
 # -----------------------------------------------------------------------
 #                           PREPROCESSING: IMAGES
 # -----------------------------------------------------------------------
 
-
-# def load_img(img_bytes: bytes):
-
-#     img = Image.open(io.BytesIO(img_bytes))
-#     print("✅ Image successfully loaded as", type(img))
-
-#     img = img.convert('RGB')
-#     print("✅ Image converted to RGB")
-
-#     img = img.resize((224, 224))
-#     print("✅ Image resized")
-
-#     img = img_to_array(img) #shape = (224, 224, 3)
-#     print("✅ Image successfully converted to", type(img), img.shape)
-
-#     img = img.reshape((-1, 224, 224, 3))
-#     print("✅ Image successfully reshaped as ndarray of shape", img.shape)
-
-#     return img
 
 def load_img_with_original(img_bytes: bytes):
     """
