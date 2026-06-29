@@ -3,6 +3,10 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 import requests
+SESSION = requests.Session()
+SESSION.headers.update({
+    "User-Agent": "ReefSight/1.0 (coral bleaching research)"
+})
 from io import StringIO
 from scipy.spatial import cKDTree
 import math
@@ -37,7 +41,7 @@ def _get_erddap_grid(dataset_id):
     Returns (tree, grid_points) where tree is a KDTree over (lat, lon).
     """
     url = f"https://coastwatch.noaa.gov/erddap/griddap/{dataset_id}.csvp?latitude,longitude"
-    r = requests.get(url, timeout=30)
+    r = SESSION.get(url, timeout=30)
     df = pd.read_csv(StringIO(r.text))
 
     # Find latitude / longitude columns by substring match
@@ -87,7 +91,7 @@ def _try_nearest_4d(dataset_id, variable, time_str, lat, lon, max_km=20, max_day
     )
 
     try:
-        r = requests.get(url, timeout=30)
+        r = SESSION.get(url, timeout=30)
         df = pd.read_csv(StringIO(r.text), skiprows=[1])
 
         if df.empty or variable not in df.columns:
@@ -138,7 +142,7 @@ def erddap_extract(dataset_id, variable, time_str, lat, lon, max_days_back=7, ma
             f"https://coastwatch.noaa.gov/erddap/griddap/{dataset_id}.csv?"
             f"{variable}[({time_s})][({la})][({lo})]"
         )
-        r = requests.get(url, timeout=60)
+        r = SESSION.get(url, timeout=60)
         df = pd.read_csv(StringIO(r.text), skiprows=[1])
 
         if df.columns[0].startswith("Error"):
@@ -221,7 +225,7 @@ def compute_weekly_clim_max_parallel(lat, lon, dt, years_back=10):
             f"[({t_start}):({t_end})][({lat})][({lon})]"
         )
         try:
-            r = requests.get(url, timeout=60)
+            r = SESSION.get(url, timeout=60)
             if r.status_code != 200:
                 return None
             df = pd.read_csv(StringIO(r.text), skiprows=[1])
@@ -278,7 +282,7 @@ def fetch_sst_range(lat, lon, end_dt, weeks=12, max_retries=3):
 
     for attempt in range(max_retries):
         try:
-            r = requests.get(url, timeout=60)
+            r = SESSION.get(url, timeout=60)
             if r.status_code == 429:
                 wait = 10 * (attempt + 1)
                 print(f"[fetch_sst_range] HTTP 429 — retrying in {wait}s (attempt {attempt+1}/{max_retries})")
@@ -444,7 +448,7 @@ def depth_from_opentopo(lat, lon, timeout=15):
         f"?locations={lat},{lon}"
     )
 
-    r = requests.get(url, timeout=timeout)
+    r = SESSION.get(url, timeout=timeout)
     r.raise_for_status()
     data = r.json()
 
@@ -655,7 +659,7 @@ def cyclone_frequency(lat, lon):
 def _get_turbidity_time_bounds():
     """Query ERDDAP metadata to get actual first and last available dates."""
     url = "https://coastwatch.noaa.gov/erddap/info/noaacwNPPVIIRSSQkd490Monthly/index.csv"
-    r = requests.get(url, timeout=30)
+    r = SESSION.get(url, timeout=30)
     df = pd.read_csv(StringIO(r.text))
 
     time_rows = df[df["Attribute Name"].isin(["time_coverage_start", "time_coverage_end"])]
@@ -696,7 +700,7 @@ def turbidity(lat, lon):
     print(f"[turbidity] requesting {t_start} to {t_end}")
     import time
     t0 = time.time()
-    r = requests.get(url, timeout=60)
+    r = SESSION.get(url, timeout=60)
     print(f"[turbidity] HTTP {r.status_code} — download took {time.time()-t0:.1f}s")
 
     if r.status_code != 200:
@@ -746,7 +750,7 @@ def windspeed(lat, lon, dt):
         f"v_wind[({t})][{zlev}][({lat})][({lon})]"
     )
 
-    r = requests.get(url, timeout=15)
+    r = SESSION.get(url, timeout=15)
     r.raise_for_status()
 
     df = pd.read_csv(StringIO(r.text), skiprows=[1])
