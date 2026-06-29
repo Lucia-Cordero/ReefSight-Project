@@ -231,24 +231,7 @@ def compute_weekly_clim_max_parallel(lat, lon, dt, years_back=10):
         except Exception:
             return None
 
-    # below: alt code for logging http request codes per year requested, for ctrl if parallel workers are set too high (e.g. 10 for erddapp, results in initial 429 and plenty 502)
-    #     try:
-    #         r = requests.get(url, timeout=60)
-    #         if r.status_code != 200:
-    #             print(f"[{year}] HTTP {r.status_code} — skipped")
-    #             return None
-    #         df = pd.read_csv(StringIO(r.text), skiprows=[1])
-    #         if df.empty or "analysed_sst" not in df.columns:
-    #             print(f"[{year}] empty or missing column — skipped")
-    #             return None
-    #         df["analysed_sst"] = pd.to_numeric(df["analysed_sst"], errors="coerce")
-    #         df["time"] = pd.to_datetime(df["time"], errors="coerce")
-    #         df = df.dropna(subset=["analysed_sst", "time"])
-    #         print(f"[{year}] OK — {len(df)} rows")
-    #         return df
-    #     except Exception as e:
-    #         print(f"[{year}] Exception: {e} — skipped")
-    #         return None
+
 
     all_dfs = []
     with ThreadPoolExecutor(max_workers=5) as executor:
@@ -273,34 +256,6 @@ def compute_weekly_clim_max_parallel(lat, lon, dt, years_back=10):
 
     return clim_max
 
-# def fetch_sst_range(lat, lon, end_dt, weeks=12):
-#     """
-#     Fetch SST time series for the last `weeks` weeks ending at end_dt.
-#     Returns a list of floats (earliest → latest).
-#     """
-#     t_end   = end_dt.strftime("%Y-%m-%d")
-#     t_start = (end_dt - timedelta(weeks=weeks)).strftime("%Y-%m-%d")
-
-#     url = (
-#         f"https://coastwatch.noaa.gov/erddap/griddap/noaacrwsstDaily.csv?"
-#         f"analysed_sst"
-#         f"[({t_start}):7:({t_end})][({lat})][({lon})]"
-#     )
-
-#     try:
-#         r = requests.get(url, timeout=60)
-#         if r.status_code != 200:
-#             return []
-#         df = pd.read_csv(StringIO(r.text), skiprows=[1])
-#         if df.empty or "analysed_sst" not in df.columns:
-#             return []
-#         df["analysed_sst"] = pd.to_numeric(df["analysed_sst"], errors="coerce")
-#         df["time"] = pd.to_datetime(df["time"], errors="coerce")
-#         df = df.dropna(subset=["analysed_sst", "time"])
-#         df = df.sort_values("time")
-#         return df["analysed_sst"].tolist()
-#     except Exception:
-#         return []
 
 import time
 
@@ -892,29 +847,8 @@ def build_X_pred(lat, lon, dt):
     # --- Build prediction dataframe ---
     # Build X_pred — use NaN for any failed fetch so missing_cols check catches it
 
-    #env = results["env"]
     env = results.get("env", {}) # bc safe lookup in case "env" doesn't exist, no keyerror
-    # X_pred = pd.DataFrame(dict(
-    #     Latitude_Degrees=[lat],
-    #     Longitude_Degrees=[lon],
-    #     Date_Year=[dt.year],
-    #     Date_Month=[dt.month],
-    #     Distance_to_Shore=[results["dist"]],
-    #     Turbidity=[results["turb"]],
-    #     Cyclone_Frequency=[results["cyc"]],
-    #     Depth_m=[results["depth"]],
-    #     Exposure=[results["exp"]],
-    #     ClimSST=[env["ClimSST"]],
-    #     Temperature_Kelvin=[env["Temperature_Kelvin"]],
-    #     Windspeed=[results["wind"]],
-    #     SSTA=[env["SSTA"]],
-    #     SSTA_DHW=[env["SSTA_DHW"]],
-    #     TSA=[env["TSA"]],
-    #     TSA_DHW=[env["TSA_DHW"]]
-    # ))
-    # old version built df from dictionary of columns
-    # new version: builds from a list of row dictionaries
-    # + adds missing value behavior (np.nan, caught downstream)
+
     X_pred = pd.DataFrame([{
         "Latitude_Degrees":   lat,
         "Longitude_Degrees":  lon,

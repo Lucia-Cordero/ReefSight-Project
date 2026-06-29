@@ -123,9 +123,7 @@ def predict_tabular_api(
         source = "auto_enriched"
 
 
-    # Guard: check for missing values before prediction
-    # is that necessary?
-    # if fetch_errors, then this should not be reached
+
     missing_cols = X_pred.columns[X_pred.isnull().any()].tolist()
     if missing_cols:
         raise HTTPException(
