@@ -15,6 +15,7 @@ from pyproj import Geod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
+
 def haversine(lat1, lon1, lat2, lon2):
     """
     Calculate haversine geo distances (slightly differs from 'asin' version).
