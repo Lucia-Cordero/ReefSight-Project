@@ -27,12 +27,16 @@ altair
 #Project_logic
 split-folders==0.5.1
 dill
-opencv-python
+opencv-python-headless
 Pillow
 pydantic
 geopandas
 pydap
 xarray
+scipy
+pyproj
+shapely
+requests
 
 
 # Trick to install the version of Tensorflow depending on your processor: darwin == Mac, ARM == M1
