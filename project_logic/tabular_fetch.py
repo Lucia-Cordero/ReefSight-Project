@@ -7,6 +7,7 @@ from io import StringIO
 from scipy.spatial import cKDTree
 import math
 import geopandas as gpd
+import os
 from shapely.geometry import LineString, Point
 from shapely.ops import nearest_points
 import xarray as xr
