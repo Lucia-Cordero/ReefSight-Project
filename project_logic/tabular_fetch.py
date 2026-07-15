@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 import requests
+import os
 SESSION = requests.Session()
 SESSION.headers.update({
     "User-Agent": "ReefSight/1.0 (coral bleaching research)"
@@ -616,17 +617,18 @@ def classify_exposure(lat, lon, coast):
 # they likely added a weighting parameter bc numbers are mostly close but slightly off-ish
 # NOT a magnitude issue (other evidence, BMO-DCO provides decimal numbers for smth they label occurences within time window..)
 
+
+
 def cyclone_frequency(lat, lon):
     """
-    Compute cyclone occurences (..) for location across last 50 years.
+    Compute cyclone occurrences for location across last 50 years.
     BMO-DCO: 1964-2014
     us: 1975-2025
     """
-
-    url = ("https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.ALL.list.v04r01.csv")
+    csv_path = os.path.join(os.path.dirname(__file__), "ibtracs", "ibtracs.ALL.list.v04r01.csv")
 
     storm_ids = set()
-    chunks = pd.read_csv(url, usecols=['SID','SEASON','LAT','LON'], skiprows=[1], chunksize=50_000)
+    chunks = pd.read_csv(csv_path, usecols=['SID','SEASON','LAT','LON'], skiprows=[1], chunksize=50_000)
 
     for df in chunks:
         df['SEASON'] = pd.to_numeric(df['SEASON'], errors='coerce')
@@ -640,13 +642,6 @@ def cyclone_frequency(lat, lon):
             (df["LON"].between(lon-2, lon+2))
         ]
 
-        #for _, row in df.iterrows():
-        #    dist = haversine(lat, lon, row['LAT'], row['LON'])
-        #    if dist <= 250000: # meters!, not kilometers in our case!
-        #        storm_ids.add(row['SID'])
-
-        # Instead of iterrows loop, vectorise
-        # Vectorised planar distance approximation (accurate within small bbox):
         df['dist'] = np.sqrt(((df['LAT'] - lat) * 111000)**2 +
                              ((df['LON'] - lon) * 111000 * np.cos(np.radians(lat)))**2)
         df = df[df['dist'] <= 250000]
