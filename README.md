@@ -6,342 +6,292 @@
 
 # ReefSight
 
-**🌊 Description**
+**🌊 Automatic Coral Health Insights Powered by AI**
 
-**ReefSight** is a multimodal deep learning application designed to predict coral bleaching risk by combining both high-resolution reef imagery and environmental (tabular) data. By leveraging computer vision, transfer learning, and structured environmental predictors, ReefSight offers a scalable, non-invasive approach to coral reef health monitoring — a key tool for timely conservation efforts in the face of climate change.
+Coral reefs support up to 25% of all marine species and are vital for biodiversity, fisheries, and coastal protection. Yet rising ocean temperatures are causing increasingly frequent and severe bleaching events — episodes where heat stress causes corals to expel the symbiotic algae they depend on, turning white and becoming vulnerable to death. Traditional reef monitoring is resource-intensive and geographically limited.
 
-**🌎 Project Motivation**
+**ReefSight** is a multimodal deep learning application that predicts coral bleaching risk by combining high-resolution reef imagery and live environmental data. By leveraging computer vision, transfer learning, and structured environmental predictors fetched in real time from NOAA APIs, ReefSight offers a scalable, non-invasive approach to coral health monitoring — designed to support researchers and conservationists with faster, data-driven insights.
 
-Coral reefs support up to 25% of all marine species and are vital for biodiversity, fisheries, and coastal protection. However, rising ocean temperatures and other stressors are causing more frequent and severe coral bleaching events. Traditional monitoring methods can be resource-intensive and limited in scale. ReefSight seeks to automate coral health predictions using AI, enabling faster insights for researchers and conservationists
-
----
-
-## 🧠 What ReefSight Does
-
-ReefSight supports **three prediction modes**:
-
-1. **Image-only prediction**
-   Uses a trained deep-learning image model to classify coral health from uploaded reef photos.
-
-2. **Tabular-only prediction**
-   Predicts bleaching risk using environmental variables such as temperature, depth, turbidity, wind speed, and cyclone frequency.
-
-3. **Multi-modal fusion (frontend-level)**
-   Allows users to combine image input and environmental context within the same analysis workflow (models remain independently trained).
+🔗 **[Try the live app](https://reefsight-front.streamlit.app)** — no installation required.
 
 ---
 
-## 📚 Datasets Used
+## 🧠 Prediction Modes
 
-ReefSight relies on **publicly available datasets** for both image-based and environmental (tabular) modeling. These datasets were selected for their relevance to coral bleaching research and their suitability for machine-learning workflows.
+ReefSight supports two independent prediction modes:
 
-### 🖼️ Coral Reef Image Dataset
+**1. Image prediction**
+Upload an underwater reef photo. A VGG16-based transfer learning model classifies it as bleached or healthy, and a GradCAM heatmap highlights the image regions driving the prediction — making the model's decision interpretable and scientifically meaningful.
 
-* **Name**: *Bleached Corals Detection*
-* **Source**: Kaggle
-* **URL**: [https://www.kaggle.com/datasets/sonainjamil/bleached-corals-detection](https://www.kaggle.com/datasets/sonainjamil/bleached-corals-detection)
+**2. Environmental data prediction**
+Provide a location (lat/lon) and observation date. ReefSight automatically fetches and derives a full set of environmental predictors from NOAA data sources (sea surface temperature, turbidity, wind speed, cyclone frequency, depth, distance to shore, and more), then runs a trained Random Forest classifier to predict bleaching risk.
 
-**Description**:
-This dataset contains labeled underwater images of coral reefs categorized as *bleached* and *non-bleached*. It is used to train and evaluate convolutional neural networks for visual coral health classification.
+Users who prefer to supply their own environmental measurements can bypass the auto-fetch pipeline and enter values manually.
 
-**Disclaimer**:
-The original Kaggle dataset was curated by removing non-coral imagery and augmented with Internet-sourced images of healthy and bleached corals.
-
-**Usage in ReefSight**:
-
-* Image preprocessing and augmentation
-* CNN baseline model training
-* VGG16 transfer learning experiments
+> A multimodal fusion mode combining both inputs is currently under development.
 
 ---
 
-### 📊 Global Coral Bleaching (Tabular) Dataset
-
-* **Name**: *Coral Reef Global Bleaching Dataset*
-* **Source**: Kaggle
-* **URL**: [https://www.kaggle.com/datasets/mehrdat/coral-reef-global-bleaching](https://www.kaggle.com/datasets/mehrdat/coral-reef-global-bleaching)
-
-**Description**:
-A global dataset documenting coral bleaching observations alongside environmental and geographic variables such as temperature, depth, turbidity, and cyclone exposure.
-
-**Usage in ReefSight**:
-
-* Exploratory data analysis (EDA)
-* Feature selection and validation
-* Training of the tabular bleaching prediction model
-
----
-
-### 🌐 External Environmental Data Sources
-
-In addition to static datasets, ReefSight derives dynamic environmental features using **external climatological data sources**, primarily inspired by:
-
-* **NOAA Coral Reef Watch** indicators
-* Public oceanographic and meteorological datasets
-
-These sources support automated feature enrichment based on geospatial coordinates and observation dates.
-
----
-
-## 🏗️ Architecture Overview
+## 🏗️ Architecture
 
 ```
-Streamlit App (Frontend)
-        ↓ HTTP requests
-FastAPI Backend (Inference)
+Streamlit Frontend (app-copy.py)
+        ↓ HTTP POST
+FastAPI Backend (api/fast.py)        ← deployed on Google Cloud Run
         ↓
-Trained Image Model + Trained Tabular Model
+Image Pipeline              Tabular Pipeline
+(VGG16 + GradCAM)          (NOAA fetch → preprocessing → Random Forest)
 ```
 
-* **Frontend**: `Streamlit` (`app.py`)
-* **Backend API**: `FastAPI` (`api/fast.py`)
-* **ML Logic**: `project_logic/`
-* **Model Training & EDA**: `notebooks/`
+**Frontend**: Streamlit, hosted on Streamlit Cloud
+**Backend API**: FastAPI, containerised with Docker, deployed on GCP Cloud Run
+**ML logic**: `project_logic/`
+**Model training & EDA**: `notebooks/`
 
 ---
 
 ## 📁 Repository Structure
 
 ```
-ReefSight-Project/
+08-ReefSight/
 ├── api/
-│   └── fast.py              # FastAPI inference service
+│   ├── __init__.py
+│   └── fast.py                  # FastAPI inference service
+├── assets/                      # Banner and static assets
+├── notebooks/                   # Model training, EDA, experiments
 ├── project_logic/
-│   ├── predict.py           # Image & tabular prediction logic
-│   ├── preprocessing.py     # Pydantic input schemas
-│   ├── tabular_fetch.py     # NOAA & environmental data enrichment
-│   ├── tabular_preproc.py   # Feature engineering
-├── notebooks/
-│   ├── IMAGE_MODEL_*.ipynb  # CNN & VGG16 model experiments
-│   ├── coral_bleaching_tabular_pipe.ipynb
-│   └── *_EDA.ipynb
-├── app.py                   # Streamlit frontend
-├── Dockerfile               # API containerization
-├── Makefile                 # Dev & deployment helpers
+│   ├── __init__.py
+│   ├── gshhg-shp-2.3.7/        # GSHHG shoreline dataset (bundled)
+│   ├── ibtracs/                 # IBTrACS cyclone data (local only, see Setup)
+│   ├── predict.py               # Image & tabular prediction logic + GradCAM
+│   ├── preprocessing.py         # Image preprocessing & Pydantic input schemas
+│   ├── tabular_fetch.py         # Live NOAA environmental data enrichment
+│   └── tabular_preproc.py       # Feature engineering & preprocessing pipeline
+├── models/                      # Trained model files (local only, see Setup)
+├── scripts/
+├── .gitignore
+├── .python-version
+├── Dockerfile
+├── download_data.py             # One-time data download script (see Setup)
+├── Makefile                     # Dev & deployment commands
+├── README.md
 ├── requirements.txt
+├── requirements_dev.txt
 └── setup.py
 ```
+
+> `models/`, `project_logic/ibtracs/`, and environment files (`.env`, `.env.yaml`, `.envrc`) are not committed to the repository. See Setup below.
 
 ---
 
 ## 🖼️ Image Prediction Pipeline
 
-* Accepts uploaded reef images (`.jpg`, `.png`, `.jpeg`)
-* Images are processed as raw bytes
-* Predictions are performed using a **pre‑trained CNN‑based image model**
-* Implemented in:
+Uploaded reef images (`.jpg`, `.png`, `.jpeg`) are passed through a VGG16 network fine-tuned for binary bleaching classification. In addition to the prediction and confidence scores, ReefSight generates a **GradCAM (Gradient-weighted Class Activation Map)** overlay — a heatmap that highlights which regions of the image most influenced the model's decision.
 
-  * `project_logic.predict.predict_image()`
+This explainability layer makes predictions interpretable for domain experts: a well-calibrated model should focus on coral tissue rather than background water or substrate.
 
-### API Endpoint
-
-```
-POST /predict/image
-```
-
+**API endpoint**: `POST /predict/image`
 **Input**: Image file
-**Output**: Bleaching classification prediction
+**Output**: Classification label, confidence scores, base64-encoded GradCAM overlay
+
+Implemented in `project_logic/predict.py` (`predict_image()`, `compute_gradcam()`, `render_gradcam_overlay()`).
 
 ---
 
 ## 📊 Tabular Prediction Pipeline
 
-The tabular model supports **two input modes**:
+### Live Environmental Data Fetching
 
-### 1. Minimal Input
+When a user provides only latitude, longitude, and observation date, the pipeline automatically fetches and derives the following environmental features:
 
-```json
-{
-  "latitude": -18.2,
-  "longitude": 147.7,
-  "observation_date": "2023-08-01"
-}
+| Feature | Source | Notes |
+|---|---|---|
+| Sea Surface Temperature (SST) | NOAA Coral Reef Watch (ERDDAP) | With temporal & spatial fallback |
+| SSTA, SSTA_DHW, TSA, TSA_DHW | NOAA Coral Reef Watch (ERDDAP) | Anomaly & degree heating week metrics |
+| ClimSST | NOAA Coral Reef Watch (ERDDAP) | Climatological SST baseline |
+| Turbidity (Kd490) | NOAA VIIRS monthly composites | 10-year mean over 100km buffer |
+| Wind speed | NOAA Blended Winds Daily | Derived from u/v wind components |
+| Cyclone frequency | IBTrACS v04r01 | Historical count, 1975–2025, 250km radius |
+| Depth | OpenTopography bathymetry | |
+| Distance to shore | GSHHG global shoreline dataset | |
+| Reef exposure | GSHHG-derived classification | Sheltered / Exposed |
+
+### Fallback Strategy
+
+ERDDAP data retrieval uses a structured multi-level fallback to maximise data availability for any coordinate and date:
+
+1. Exact match (requested time, lat, lon)
+2. Temporal fallback (up to 7 days back)
+3. Spatial fallback (nearest valid ERDDAP grid point within 50km)
+4. Combined temporal + spatial fallback
+5. 4D nearest neighbour (wider spatial and temporal bounds)
+
+If a variable cannot be retrieved after all fallback levels, it is set to `NaN` and the prediction is still attempted with available features. The frontend surfaces which fallback strategy was used for each variable, and which variables could not be fetched.
+
+### Feature Engineering
+
+Before inference, features are processed through a `dill`-serialised `sklearn` pipeline:
+- Cyclic encoding of month (sin/cos)
+- Year normalisation
+- Median imputation for missing values
+- Robust scaling for numerical features
+- One-hot encoding for categorical features (`Exposure`)
+
+**API endpoint**: `POST /predict/tabular`
+**Output**: Classification label, confidence scores, fetch errors, fallback sources
+
+---
+
+## 🔍 GradCAM — Model Explainability
+
+GradCAM is implemented by splitting the VGG16 model graph at the `block5_conv3` layer to compute gradients of the predicted class score with respect to that layer's activations. The resulting heatmap is:
+
+- Resized to match the input image (224×224)
+- Blended with the original image using the INFERNO colormap
+- Annotated with a colorbar legend (Bleached → Healthy)
+- Returned as a base64-encoded PNG for direct rendering in the frontend
+
+This approach provides local, pixel-level interpretability for each individual prediction.
+
+---
+
+## ⚠️ Known Limitations & Design Decisions
+
+**Cyclone frequency is precomputed, not live-fetched**
+
+The IBTrACS global cyclone database (~150MB CSV) is bundled with the Docker image rather than fetched at runtime. This was a deliberate decision: the IBTrACS dataset is queried by NOAA over a fixed historical window (1975–2025) to compute a static climatological feature — cyclone frequency is not time-specific in the way SST or turbidity are. Fetching this file live from NOAA servers at inference time consistently caused 10–13 minute delays due to bandwidth throttling of cloud provider IP ranges, making the feature unusable in production. The bundled CSV is refreshed at each new deployment via `download_data.py`. Users running locally should run this script once after cloning (see Setup).
+
+**NOAA ERDDAP throttling from cloud IPs**
+
+NOAA's ERDDAP servers rate-limit or block requests from cloud provider IP ranges (GCP, AWS, etc.) more aggressively than residential IPs. This means live environmental data fetches (SST, turbidity, windspeed) may be slower in production than locally. The structured fallback strategy mitigates data availability issues, but cannot fully compensate for server-side throttling.
+
+**Models are trained independently**
+
+Image and tabular models are trained on separate datasets and combined at the application level, not via a joint architecture. The multimodal fusion mode is under development.
+
+**Predictions are for research and educational purposes**
+
+ReefSight is not intended for operational reef management decisions. Model outputs reflect patterns in historical training data and should be interpreted accordingly.
+
+---
+
+## 🚀 Running Locally
+
+### Prerequisites
+
+- Python 3.10.6
+- pip
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/Lucia-Cordero/ReefSight.git
+cd ReefSight
 ```
 
-Environmental features are **automatically fetched and derived** using NOAA‑based data pipelines.
-
-### 2. Full Feature Override
-
-Users may optionally supply a complete environmental feature vector including:
-
-* Distance to shore
-* Turbidity
-* Cyclone frequency
-* Depth
-* Sea surface temperature
-* Temperature variability
-* Wind speed
-
-### API Endpoint
-
-```
-POST /predict/tabular
-```
-
-Implemented in:
-
-* `project_logic.tabular_fetch.build_X_pred()`
-* `project_logic.predict.predict_tabular()`
-
----
-
-## 🔍 Data Preprocessing (Tabular Pipeline)
-
-A substantial portion of ReefSight focuses on **robust preprocessing and feature engineering** for environmental (tabular) data, ensuring that bleaching predictions are scientifically grounded and reproducible.
-
-### Input Modes
-
-The tabular pipeline supports two levels of input:
-
-1. **Minimal Geospatial Input**
-   Users provide latitude, longitude, and observation date. From these, the pipeline automatically derives environmental predictors.
-
-2. **Full Feature Override**
-   Advanced users may supply a complete environmental feature vector, bypassing auto‑fetching and derivation.
-
-### Data Enrichment
-
-Environmental variables are programmatically fetched and derived using external climatological sources (e.g. NOAA‑based datasets). The pipeline computes and aggregates:
-
-* Sea surface temperature (mean, variability)
-* Wind speed
-* Cyclone frequency
-* Turbidity
-* Depth and distance to shore
-
-This logic is implemented primarily in:
-
-* `project_logic/tabular_fetch.py`
-
-### Feature Engineering & Cleaning
-
-Before inference, tabular data undergoes:
-
-* Type validation via **Pydantic schemas**
-* Missing value handling and default imputation
-* Scaling and normalization aligned with training distributions
-* Feature ordering to match trained model expectations
-
-Implemented in:
-
-* `project_logic/tabular_preproc.py`
-* `project_logic/preprocessing.py`
-
----
-
-## 🧾 Tabular Feature Glossary
-
-The following features are used by the tabular bleaching prediction model. When not explicitly provided by the user, they are **automatically derived** from geospatial coordinates and observation date.
-
-| Feature                   | Description                                              |
-| ------------------------- | -------------------------------------------------------- |
-| `latitude` / `longitude`  | Geographic coordinates of the reef observation           |
-| `observation_date`        | Date of observation, used for temporal aggregation       |
-| `sea_surface_temperature` | Mean sea surface temperature over the observation window |
-| `sst_variability`         | Short-term variability in sea surface temperature        |
-| `wind_speed`              | Average surface wind speed near the reef location        |
-| `cyclone_frequency`       | Historical frequency of cyclonic activity in the region  |
-| `turbidity`               | Proxy for water clarity and suspended particles          |
-| `depth`                   | Estimated reef depth at the given coordinates            |
-| `distance_to_shore`       | Distance from reef location to nearest shoreline         |
-
-These features were selected based on **established coral bleaching literature** and exploratory data analysis performed during model development.
-
----
-
-## 📊 Model Performance Summary
-
-### Image Model
-
-* Architecture: CNN baseline and VGG16 (transfer learning, trained offline)
-* Task: Binary classification (bleached vs non‑bleached coral imagery)
-* Evaluation metrics explored in notebooks:
-
-  * Accuracy
-  * Precision / Recall
-  * Confusion Matrix
-
-Transfer learning models demonstrated **notably improved generalization** compared to the baseline CNN, particularly on validation data.
-
-### Tabular Model
-
-* Input: Engineered environmental feature vectors
-* Task: Bleaching risk classification
-* Focus areas:
-
-  * Feature importance analysis
-  * Sensitivity to temperature‑based predictors
-
-Results indicate that **temperature‑related variables and variability metrics** are among the strongest predictors of bleaching risk.
-
-> Detailed metrics, plots, and comparisons are documented in the notebooks within the `notebooks/` directory.
-
----
-
-## 🚀 Running the Backend Locally
-
-This repository contains the **backend inference API and machine-learning logic** for ReefSight.
-The interactive frontend application is maintained in a **separate repository**:
-
-👉 [https://github.com/Lucia-Cordero/ReefSight_front](https://github.com/Lucia-Cordero/ReefSight_front)
-
-### 1. Install Dependencies
+### 2. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Run the FastAPI Server
+### 3. Download required data
+
+The IBTrACS cyclone dataset is not committed to the repository (see Known Limitations above). Run the following once after cloning:
+
+```bash
+python download_data.py
+```
+
+This downloads the IBTrACS CSV (~150MB) to `project_logic/ibtracs/`.
+
+### 4. Add model files
+
+Place the following trained model files in the `models/` directory (not committed to the repository):
+
+```
+models/
+├── VGG16_image_model.keras
+├── RandomForestClassifier.dill
+└── preproc.dill
+```
+
+### 5. Run the FastAPI backend
 
 ```bash
 uvicorn api.fast:app --reload
 ```
 
-Once running, the API will be available at:
+API available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
 
-```
-http://localhost:8000
-```
+### 6. Run the Streamlit frontend
 
-### 3. Test the API
+The frontend lives in a separate repository:
+👉 [https://github.com/Lucia-Cordero/ReefSight_front](https://github.com/Lucia-Cordero/ReefSight_front)
 
-You can interact with the backend using:
-
-* FastAPI Swagger UI (`/docs`)
-* API clients such as `curl` or Postman
-* The ReefSight frontend application (separate repository)
+Point `API_URL` in `app-copy.py` to `http://localhost:8000` for local development.
 
 ---
 
-## 🐳 Docker Support
+## 🐳 Deployment
 
-The backend API can be containerized using the provided `Dockerfile`.
+The backend is containerised with Docker and deployed on **Google Cloud Run**. Deployment is managed via `Makefile` targets.
+
+### Build and test locally
 
 ```bash
-docker build -t reefsight-api .
-docker run -p 8000:8000 reefsight-api
+docker build --tag=$GAR_IMAGE:dev .
+docker run -it -e PORT=8000 -p 8000:8000 $GAR_IMAGE:dev
 ```
 
+### Deploy to GCP Cloud Run
+
+```bash
+make docker_build    # builds with linux/amd64 platform tag for Cloud Run compatibility
+make docker_push     # pushes to Google Artifact Registry
+make docker_deploy   # deploys to Cloud Run
+```
+
+First-time setup (one-time only):
+```bash
+make docker_allow        # authenticate Docker with GAR
+make docker_create_repo  # create the Artifact Registry repository
+```
+
+Deployment configuration (memory, region, environment variables) is managed via `.env.yaml` (not committed).
+
 ---
 
-## 🧪 Model Development
+## 📊 Model Performance
 
-All model training and experimentation lives in the `notebooks/` directory and includes:
+### Image Model (VGG16)
 
-* Image dataset exploration
-* CNN baseline model
-* VGG16 transfer learning
-* Tabular feature engineering and pipelines
+- Architecture: VGG16 with transfer learning, fine-tuned for binary classification
+- Task: Bleached vs healthy coral imagery
+- VGG16 transfer learning showed notably improved generalisation over a CNN baseline, particularly on validation data
 
-These notebooks document the **research and modeling process** behind the deployed models.
+### Tabular Model (Random Forest)
+
+- Input: Engineered environmental feature vectors (15 features post-encoding)
+- Task: Binary bleaching risk classification
+- Temperature-related variables and their variability metrics (SSTA, SSTA_DHW, TSA) were among the strongest predictors of bleaching risk
+
+Full training details, metrics, and experiments are documented in `notebooks/`.
 
 ---
 
-## 📌 Limitations & Notes
+## 📚 Datasets
 
-* Image and tabular models are trained **independently**
-* "Multi‑modal" fusion occurs at the **application level**, not via a joint neural architecture
-* Predictions are intended for **research and educational purposes**, not operational reef management
+| Dataset | Source | Use |
+|---|---|---|
+| Bleached Corals Detection | [Kaggle](https://www.kaggle.com/datasets/sonainjamil/bleached-corals-detection) | Image model training |
+| Coral Reef Global Bleaching | [Kaggle](https://www.kaggle.com/datasets/mehrdat/coral-reef-global-bleaching) | Tabular model training |
+| NOAA Coral Reef Watch | ERDDAP API | Live SST & anomaly features |
+| NOAA VIIRS | ERDDAP API | Live turbidity |
+| NOAA Blended Winds | ERDDAP API | Live wind speed |
+| IBTrACS v04r01 | NOAA NCEI | Cyclone frequency (bundled) |
+| GSHHG v2.3.7 | NOAA | Shoreline distance & exposure |
+| OpenTopography | API | Bathymetric depth |
 
 ---
 
@@ -353,9 +303,10 @@ MIT License
 
 ## 🙌 Acknowledgements
 
-* NOAA Coral Reef Watch
-* Open coral bleaching datasets
-* Streamlit & FastAPI open‑source communities
+- NOAA Coral Reef Watch
+- IBTrACS — International Best Track Archive for Climate Stewardship
+- GSHHG — Global Self-consistent, Hierarchical, High-resolution Geography Database
+- Streamlit & FastAPI open-source communities
 
 ---
 
