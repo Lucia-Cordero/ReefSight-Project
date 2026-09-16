@@ -12,7 +12,7 @@ Coral reefs support up to 25% of all marine species and are vital for biodiversi
 
 **ReefSight** is a multimodal deep learning application that predicts coral bleaching risk by combining high-resolution reef imagery and live environmental data. By leveraging computer vision, transfer learning, and structured environmental predictors fetched in real time from NOAA APIs, ReefSight offers a scalable, non-invasive approach to coral health monitoring — designed to support researchers and conservationists with faster, data-driven insights.
 
-🔗 **[Try the live app](https://reefsight-front.streamlit.app)** — no installation required.
+🔗 **[Watch a recorded demo of the app](https://www.loom.com/share/84418386241d46aa8fbc40942ef06c42)**
 
 ---
 
